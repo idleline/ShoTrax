@@ -71,6 +71,36 @@ function formatRateNumber(value) {
     return fixed.startsWith("0.") ? `.${fixed.split(".")[1]}` : fixed;
 }
 
+function getAxisBounds(values, options = {}) {
+    const paddingRatio = options.paddingRatio ?? 0.1;
+    const minimumPadding = options.minimumPadding ?? 0.02;
+    const clampMin = options.clampMin;
+    const clampMax = options.clampMax;
+    const minValue = Math.min.apply(null, values);
+    const maxValue = Math.max.apply(null, values);
+    const span = maxValue - minValue;
+    const padding = Math.max(span * paddingRatio, minimumPadding);
+    let lowerBound = minValue - padding;
+    let upperBound = maxValue + padding;
+
+    if (typeof clampMin === "number") {
+        lowerBound = Math.max(clampMin, lowerBound);
+    }
+
+    if (typeof clampMax === "number") {
+        upperBound = Math.min(clampMax, upperBound);
+    }
+
+    if (lowerBound === upperBound) {
+        upperBound = lowerBound + minimumPadding;
+    }
+
+    return {
+        min: lowerBound,
+        max: upperBound
+    };
+}
+
 function showMessage(message, isError = false) {
     const cssClass = isError ? "text-danger" : "text-success";
     $("#status-message")
@@ -307,9 +337,14 @@ function renderPerformanceChart(events) {
     emptyState.hide();
     chartContainer.show();
 
-    const maxRate = series.reduce(function (maxValue, point) {
-        return Math.max(maxValue, point.avg, point.ops);
-    }, 0);
+    const avgValues = series.map(function (point) {
+        return point.avg;
+    });
+    const opsValues = series.map(function (point) {
+        return point.ops;
+    });
+    const avgBounds = getAxisBounds(avgValues, { clampMin: 0, clampMax: 1, minimumPadding: 0.01 });
+    const opsBounds = getAxisBounds(opsValues, { clampMin: 0, minimumPadding: 0.03 });
     const chartElement = document.getElementById("performance-chart");
 
     performanceChart = new Chart(chartElement, {
@@ -318,6 +353,7 @@ function renderPerformanceChart(events) {
             datasets: [
                 {
                     label: "AVG",
+                    yAxisID: "yAvg",
                     data: series.map(function (point) {
                         return { x: point.x, y: point.avg };
                     }),
@@ -330,6 +366,7 @@ function renderPerformanceChart(events) {
                 },
                 {
                     label: "OPS",
+                    yAxisID: "yOps",
                     data: series.map(function (point) {
                         return { x: point.x, y: point.ops };
                     }),
@@ -376,12 +413,30 @@ function renderPerformanceChart(events) {
                         display: false
                     }
                 },
-                y: {
-                    beginAtZero: true,
-                    suggestedMax: Math.max(1.1, maxRate * 1.1),
+                yOps: {
+                    position: "left",
+                    min: opsBounds.min,
+                    max: opsBounds.max,
                     title: {
                         display: true,
-                        text: "Rate"
+                        text: "OPS"
+                    },
+                    ticks: {
+                        callback: function (value) {
+                            return formatRateNumber(value);
+                        }
+                    }
+                },
+                yAvg: {
+                    position: "right",
+                    min: avgBounds.min,
+                    max: avgBounds.max,
+                    title: {
+                        display: true,
+                        text: "AVG"
+                    },
+                    grid: {
+                        drawOnChartArea: false
                     },
                     ticks: {
                         callback: function (value) {
