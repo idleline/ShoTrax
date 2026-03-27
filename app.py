@@ -33,6 +33,10 @@ VALID_OUTCOMES = {"out", "single", "double", "triple", "home_run"}
 VALID_LIMITS = {50, 100, 200, 500}
 
 
+def format_outcome_label(outcome: str) -> str:
+    return outcome.replace("_", " ").title()
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///baseball_hits.db"
@@ -80,7 +84,7 @@ def create_app() -> Flask:
         db.session.add(event)
         db.session.commit()
 
-        return jsonify(build_response_payload("Event recorded.")), 201
+        return jsonify(build_response_payload(f"{format_outcome_label(outcome)} Recorded.")), 201
 
     @app.delete("/api/events/last")
     def delete_last_event():

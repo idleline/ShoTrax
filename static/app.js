@@ -71,6 +71,14 @@ function formatRateNumber(value) {
     return fixed.startsWith("0.") ? `.${fixed.split(".")[1]}` : fixed;
 }
 
+function formatEventShare(count, totalEvents) {
+    if (!totalEvents) {
+        return "0.0%";
+    }
+
+    return `${((count / totalEvents) * 100).toFixed(1)}%`;
+}
+
 function getAxisBounds(values, options = {}) {
     const paddingRatio = options.paddingRatio ?? 0.1;
     const minimumPadding = options.minimumPadding ?? 0.02;
@@ -113,7 +121,6 @@ function updateStats(stats) {
     $("#stat-at-bats").text(stats.at_bats);
     $("#stat-hits").text(stats.hits);
     $("#stat-avg").text(displayRate(stats.batting_average));
-    $("#stat-obp").text(displayRate(stats.on_base_percentage));
     $("#stat-slg").text(displayRate(stats.slugging_percentage));
     $("#stat-ops").text(stats.ops);
     $("#stat-singles").text(stats.singles);
@@ -123,6 +130,11 @@ function updateStats(stats) {
     $("#stat-outs").text(stats.outs);
     $("#stat-total-bases").text(stats.total_bases);
     $("#stat-sample-size").text(stats.sample_size);
+    $("#stat-singles-share").text(formatEventShare(stats.singles, stats.at_bats));
+    $("#stat-doubles-share").text(formatEventShare(stats.doubles, stats.at_bats));
+    $("#stat-triples-share").text(formatEventShare(stats.triples, stats.at_bats));
+    $("#stat-home-runs-share").text(formatEventShare(stats.home_runs, stats.at_bats));
+    $("#stat-outs-share").text(formatEventShare(stats.outs, stats.at_bats));
 }
 
 function renderEvents(events) {
@@ -147,6 +159,21 @@ function renderEvents(events) {
             </tr>
         `);
     });
+}
+
+function updateEventsToday(events) {
+    const todayKey = getLocalDayKey(new Date());
+    const eventsToday = (Array.isArray(events) ? events : []).reduce(function (count, event) {
+        const date = new Date(normalizeUtcTimestamp(event.created_at));
+
+        if (isNaN(date)) {
+            return count;
+        }
+
+        return getLocalDayKey(date) === todayKey ? count + 1 : count;
+    }, 0);
+
+    $("#stat-events-today").text(eventsToday);
 }
 
 function getLocalDayKey(date) {
@@ -488,6 +515,7 @@ function loadPerformanceChart() {
         data: { limit: "all" },
         success: function (response) {
             allEventsCache = Array.isArray(response.events) ? response.events : [];
+            updateEventsToday(allEventsCache);
             renderPerformanceChart(allEventsCache);
         },
         error: function () {
