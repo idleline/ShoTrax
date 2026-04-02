@@ -22,28 +22,155 @@
         </div>
 
         <div class="row g-4">
-            <div class="col-lg-4">
+            <div class="col-12">
                 <div class="card shadow-sm">
                     <div class="card-body">
                         <h4 class="card-title mb-3">Add Outcome</h4>
 
-                        <div class="mb-3">
-                            <label for="outcome" class="form-label">Outcome</label>
-                            <select id="outcome" class="form-select">
-                                <option value="out">Out</option>
-                                <option value="single">Single</option>
-                                <option value="double">Double</option>
-                                <option value="triple">Triple</option>
-                                <option value="home_run">Home Run</option>
+                        <div class="row g-4">
+                            <div class="col-lg-3">
+                                <div class="form-label mb-2">Outcome</div>
+                                <div class="d-flex flex-wrap gap-2" data-selection-group="outcome">
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="out" aria-pressed="false">Out</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="single" aria-pressed="false">Single</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="double" aria-pressed="false">Double</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="triple" aria-pressed="false">Triple</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="home_run" aria-pressed="false">Home Run</button>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-4">
+                                <div class="form-label mb-2">Difficulty Level</div>
+                                <div class="d-flex flex-wrap gap-2" data-selection-group="difficulty_level">
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="rookie" aria-pressed="false">Rookie</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="veteran" aria-pressed="false">Veteran</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="all_star" aria-pressed="false">All-Star</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="hall_of_fame" aria-pressed="false">Hall of Fame</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="legend" aria-pressed="false">Legend</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="goat" aria-pressed="false">G.O.A.T.</button>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-5">
+                                <div class="form-label mb-2">Game Mode</div>
+                                <div class="d-flex flex-wrap gap-2" data-selection-group="game_mode">
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="conquest" aria-pressed="false">Conquest</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="ranked" aria-pressed="false">Ranked</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="events" aria-pressed="false">Events</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="moments" aria-pressed="false">Moments</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="diamond_quest" aria-pressed="false">Diamond Quest</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="showdown" aria-pressed="false">Showdown</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="vs_cpu" aria-pressed="false">vs CPU</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="miniseasons" aria-pressed="false">Miniseasons</button>
+                                </div>
+
+                                <div class="d-flex flex-wrap gap-2 mt-4">
+                                    <button id="submit-event" class="btn btn-primary">Submit</button>
+                                    <button id="delete-last-event" class="btn btn-warning">Delete Last Event</button>
+                                </div>
+
+                                <div id="status-message" class="mt-3 small"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h4 class="card-title mb-3">Stats Filters</h4>
+
+                        <div class="mb-4">
+                            <label for="stats-limit" class="form-label">Stats Window</label>
+                            <select id="stats-limit" class="form-select">
+                                <option value="all" selected>All</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                                <option value="500">500</option>
                             </select>
                         </div>
 
-                        <div class="d-grid gap-2">
-                            <button id="submit-event" class="btn btn-primary">Submit</button>
-                            <button id="delete-last-event" class="btn btn-warning">Delete Last Event</button>
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="form-label mb-0">Difficulty</div>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary filter-select-all" data-filter-group="stats-difficulty-levels">Select All</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary filter-clear-all" data-filter-group="stats-difficulty-levels">Clear All</button>
+                                </div>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="rookie" id="stats-difficulty-rookie" data-filter-group="stats-difficulty-levels" checked>
+                                    <label class="form-check-label" for="stats-difficulty-rookie">Rookie</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="veteran" id="stats-difficulty-veteran" data-filter-group="stats-difficulty-levels" checked>
+                                    <label class="form-check-label" for="stats-difficulty-veteran">Veteran</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="all_star" id="stats-difficulty-all-star" data-filter-group="stats-difficulty-levels" checked>
+                                    <label class="form-check-label" for="stats-difficulty-all-star">All-Star</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="hall_of_fame" id="stats-difficulty-hall-of-fame" data-filter-group="stats-difficulty-levels" checked>
+                                    <label class="form-check-label" for="stats-difficulty-hall-of-fame">Hall of Fame</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="legend" id="stats-difficulty-legend" data-filter-group="stats-difficulty-levels" checked>
+                                    <label class="form-check-label" for="stats-difficulty-legend">Legend</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="goat" id="stats-difficulty-goat" data-filter-group="stats-difficulty-levels" checked>
+                                    <label class="form-check-label" for="stats-difficulty-goat">G.O.A.T.</label>
+                                </div>
+                            </div>
                         </div>
 
-                        <div id="status-message" class="mt-3 small"></div>
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="form-label mb-0">Game Mode</div>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary filter-select-all" data-filter-group="stats-game-modes">Select All</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary filter-clear-all" data-filter-group="stats-game-modes">Clear All</button>
+                                </div>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="conquest" id="stats-game-mode-conquest" data-filter-group="stats-game-modes" checked>
+                                    <label class="form-check-label" for="stats-game-mode-conquest">Conquest</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="ranked" id="stats-game-mode-ranked" data-filter-group="stats-game-modes" checked>
+                                    <label class="form-check-label" for="stats-game-mode-ranked">Ranked</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="events" id="stats-game-mode-events" data-filter-group="stats-game-modes" checked>
+                                    <label class="form-check-label" for="stats-game-mode-events">Events</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="moments" id="stats-game-mode-moments" data-filter-group="stats-game-modes" checked>
+                                    <label class="form-check-label" for="stats-game-mode-moments">Moments</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="diamond_quest" id="stats-game-mode-diamond-quest" data-filter-group="stats-game-modes" checked>
+                                    <label class="form-check-label" for="stats-game-mode-diamond-quest">Diamond Quest</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="showdown" id="stats-game-mode-showdown" data-filter-group="stats-game-modes" checked>
+                                    <label class="form-check-label" for="stats-game-mode-showdown">Showdown</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="vs_cpu" id="stats-game-mode-vs-cpu" data-filter-group="stats-game-modes" checked>
+                                    <label class="form-check-label" for="stats-game-mode-vs-cpu">vs CPU</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input stats-filter-checkbox" type="checkbox" value="miniseasons" id="stats-game-mode-miniseasons" data-filter-group="stats-game-modes" checked>
+                                    <label class="form-check-label" for="stats-game-mode-miniseasons">Miniseasons</label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -51,20 +178,7 @@
             <div class="col-lg-8">
                 <div class="card shadow-sm">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h4 class="card-title mb-0">Stats</h4>
-
-                            <div class="d-flex align-items-center gap-2">
-                                <label for="stats-limit" class="form-label mb-0">Stats Window</label>
-                                <select id="stats-limit" class="form-select form-select-sm" style="width: auto;">
-                                    <option value="all" selected>All</option>
-                                    <option value="50">50</option>
-                                    <option value="100">100</option>
-                                    <option value="200">200</option>
-                                    <option value="500">500</option>
-                                </select>
-                            </div>
-                        </div>
+                        <h4 class="card-title mb-3">Stats</h4>
 
                         <div class="row g-3">
                             <div class="col-sm-6 col-xl-2">
@@ -169,9 +283,6 @@
                         <div class="mt-3 text-muted small">
                             Stats based on: <span id="stat-sample-size">all</span>
                         </div>
-                        <div class="mt-1 text-muted small">
-                            Note: OPS is simplified here because walks, HBP, and sacrifice flies are not yet tracked.
-                        </div>
                     </div>
                 </div>
             </div>
@@ -237,12 +348,14 @@
                                     <tr>
                                         <th>ID</th>
                                         <th>Outcome</th>
+                                        <th>Difficulty</th>
+                                        <th>Game Mode</th>
                                         <th>Timestamp</th>
                                     </tr>
                                 </thead>
                                 <tbody id="events-table-body">
                                     <tr>
-                                        <td colspan="3" class="text-center text-muted">No events yet</td>
+                                        <td colspan="5" class="text-center text-muted">No events yet</td>
                                     </tr>
                                 </tbody>
                             </table>

@@ -5,7 +5,7 @@ from typing import Optional
 
 from flask import Flask, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import desc
+from sqlalchemy import desc, false, inspect, text
 
 db = SQLAlchemy()
 
@@ -15,6 +15,8 @@ class Event(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     outcome = db.Column(db.String(20), nullable=False, index=True)
+    difficulty_level = db.Column(db.String(20), nullable=True, index=True)
+    game_mode = db.Column(db.String(20), nullable=True, index=True)
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -25,16 +27,49 @@ class Event(db.Model):
         return {
             "id": self.id,
             "outcome": self.outcome,
+            "difficulty_level": self.difficulty_level,
+            "game_mode": self.game_mode,
             "created_at": self.created_at.isoformat().replace("+00:00", "Z"),
         }
 
 
 VALID_OUTCOMES = {"out", "single", "double", "triple", "home_run"}
+VALID_DIFFICULTY_LEVELS = {
+    "rookie",
+    "veteran",
+    "all_star",
+    "hall_of_fame",
+    "legend",
+    "goat",
+}
+VALID_GAME_MODES = {
+    "conquest",
+    "ranked",
+    "events",
+    "moments",
+    "diamond_quest",
+    "showdown",
+    "vs_cpu",
+    "miniseasons",
+}
 VALID_LIMITS = {50, 100, 200, 500}
 
 
 def format_outcome_label(outcome: str) -> str:
     return outcome.replace("_", " ").title()
+
+
+def ensure_event_columns() -> None:
+    existing_columns = {
+        column["name"]
+        for column in inspect(db.engine).get_columns(Event.__tablename__)
+    }
+
+    with db.engine.begin() as connection:
+        if "difficulty_level" not in existing_columns:
+            connection.execute(text("ALTER TABLE events ADD COLUMN difficulty_level VARCHAR(20)"))
+        if "game_mode" not in existing_columns:
+            connection.execute(text("ALTER TABLE events ADD COLUMN game_mode VARCHAR(20)"))
 
 
 def create_app() -> Flask:
@@ -46,6 +81,7 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
+        ensure_event_columns()
 
     @app.route("/")
     def index():
@@ -56,8 +92,13 @@ def create_app() -> Flask:
         limit = parse_limit(request.args.get("limit", "all"))
         if limit == "invalid":
             return jsonify({"error": "limit must be one of: all, 50, 100, 200, 500"}), 400
+        difficulty_levels, game_modes = parse_stats_filters()
+        if difficulty_levels == "invalid":
+            return jsonify({"error": "Invalid difficulty filter"}), 400
+        if game_modes == "invalid":
+            return jsonify({"error": "Invalid game mode filter"}), 400
 
-        return jsonify(calculate_stats(limit)), 200
+        return jsonify(calculate_stats(limit, difficulty_levels, game_modes)), 200
 
     @app.get("/api/events")
     def get_events():
@@ -76,11 +117,23 @@ def create_app() -> Flask:
     def add_event():
         payload = request.get_json(silent=True) or request.form
         outcome = str(payload.get("outcome", "")).strip().lower()
+        difficulty_level = str(payload.get("difficulty_level", "")).strip().lower()
+        game_mode = str(payload.get("game_mode", "")).strip().lower()
 
         if outcome not in VALID_OUTCOMES:
             return jsonify({"error": "Invalid outcome"}), 400
+        if difficulty_level not in VALID_DIFFICULTY_LEVELS:
+            return jsonify({"error": "Invalid difficulty level"}), 400
+        if game_mode not in VALID_GAME_MODES:
+            return jsonify({"error": "Invalid game mode"}), 400
+        if difficulty_level == "goat" and game_mode != "diamond_quest":
+            return jsonify({"error": "G.O.A.T. difficulty is only available for Diamond Quest"}), 400
 
-        event = Event(outcome=outcome)
+        event = Event(
+            outcome=outcome,
+            difficulty_level=difficulty_level,
+            game_mode=game_mode,
+        )
         db.session.add(event)
         db.session.commit()
 
@@ -128,16 +181,56 @@ def parse_limit(value: Optional[str]) -> Optional[int] | str:
     return parsed if parsed in VALID_LIMITS else "invalid"
 
 
-def fetch_outcomes(limit: Optional[int] = None) -> list[str]:
+def parse_filter_values(value: Optional[str], valid_values: set[str]) -> list[str] | None | str:
+    if value is None:
+        return None
+
+    value = value.strip().lower()
+    if value == "":
+        return []
+
+    parsed_values = [item.strip() for item in value.split(",") if item.strip()]
+    if any(item not in valid_values for item in parsed_values):
+        return "invalid"
+
+    return parsed_values
+
+
+def parse_stats_filters() -> tuple[list[str] | None | str, list[str] | None | str]:
+    difficulty_levels = parse_filter_values(request.args.get("difficulty_levels"), VALID_DIFFICULTY_LEVELS)
+    game_modes = parse_filter_values(request.args.get("game_modes"), VALID_GAME_MODES)
+    return difficulty_levels, game_modes
+
+
+def apply_event_filters(query, difficulty_levels: list[str] | None = None, game_modes: list[str] | None = None):
+    if difficulty_levels is not None:
+        query = query.filter(false()) if not difficulty_levels else query.filter(Event.difficulty_level.in_(difficulty_levels))
+
+    if game_modes is not None:
+        query = query.filter(false()) if not game_modes else query.filter(Event.game_mode.in_(game_modes))
+
+    return query
+
+
+def fetch_outcomes(
+    limit: Optional[int] = None,
+    difficulty_levels: list[str] | None = None,
+    game_modes: list[str] | None = None,
+) -> list[str]:
     query = Event.query.with_entities(Event.outcome).order_by(desc(Event.id))
+    query = apply_event_filters(query, difficulty_levels, game_modes)
     if isinstance(limit, int):
         query = query.limit(limit)
 
     return [row.outcome for row in query.all()]
 
 
-def calculate_stats(limit: Optional[int] = None) -> dict:
-    outcomes = fetch_outcomes(limit)
+def calculate_stats(
+    limit: Optional[int] = None,
+    difficulty_levels: list[str] | None = None,
+    game_modes: list[str] | None = None,
+) -> dict:
+    outcomes = fetch_outcomes(limit, difficulty_levels, game_modes)
 
     at_bats = len(outcomes)
     singles = outcomes.count("single")
@@ -182,7 +275,13 @@ def build_response_payload(message: str) -> dict:
     if history_limit == "invalid":
         history_limit = 50
 
-    stats = calculate_stats(stats_limit)
+    difficulty_levels, game_modes = parse_stats_filters()
+    if difficulty_levels == "invalid":
+        difficulty_levels = None
+    if game_modes == "invalid":
+        game_modes = None
+
+    stats = calculate_stats(stats_limit, difficulty_levels, game_modes)
 
     events_query = Event.query.order_by(desc(Event.id))
     if isinstance(history_limit, int):

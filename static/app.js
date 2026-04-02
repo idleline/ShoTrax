@@ -1,5 +1,24 @@
 let performanceChart = null;
 let allEventsCache = [];
+let statusMessageTimeoutId = null;
+const DIFFICULTY_LABELS = {
+    rookie: "Rookie",
+    veteran: "Veteran",
+    all_star: "All-Star",
+    hall_of_fame: "Hall of Fame",
+    legend: "Legend",
+    goat: "G.O.A.T."
+};
+const GAME_MODE_LABELS = {
+    conquest: "Conquest",
+    ranked: "Ranked",
+    events: "Events",
+    moments: "Moments",
+    diamond_quest: "Diamond Quest",
+    showdown: "Showdown",
+    vs_cpu: "vs CPU",
+    miniseasons: "Miniseasons"
+};
 
 function normalizeUtcTimestamp(isoString) {
     if (typeof isoString !== "string") {
@@ -59,6 +78,14 @@ function formatOutcome(outcome) {
         });
 }
 
+function formatSelectionLabel(value, labels) {
+    if (!value) {
+        return "—";
+    }
+
+    return labels[value] || formatOutcome(value);
+}
+
 function displayRate(value) {
     if (typeof value !== "string") {
         return ".000";
@@ -111,10 +138,107 @@ function getAxisBounds(values, options = {}) {
 
 function showMessage(message, isError = false) {
     const cssClass = isError ? "text-danger" : "text-success";
-    $("#status-message")
+    const statusMessage = $("#status-message");
+
+    if (statusMessageTimeoutId) {
+        window.clearTimeout(statusMessageTimeoutId);
+        statusMessageTimeoutId = null;
+    }
+
+    statusMessage
+        .stop(true, true)
+        .show()
         .removeClass("text-danger text-success")
         .addClass(cssClass)
         .text(message);
+
+    if (!isError) {
+        statusMessageTimeoutId = window.setTimeout(function () {
+            statusMessage.fadeOut(400, function () {
+                $(this)
+                    .text("")
+                    .removeClass("text-danger text-success")
+                    .show();
+            });
+            statusMessageTimeoutId = null;
+        }, 10000);
+    }
+}
+
+function getSelectionGroup(groupName) {
+    return $(`[data-selection-group="${groupName}"]`);
+}
+
+function setSelectedValue(groupName, value) {
+    getSelectionGroup(groupName).find(".selection-button").each(function () {
+        const isSelected = Boolean(value) && $(this).attr("data-selection-value") === value;
+
+        $(this)
+            .toggleClass("active btn-primary text-white", isSelected)
+            .toggleClass("btn-outline-secondary", !isSelected)
+            .attr("aria-pressed", isSelected ? "true" : "false");
+    });
+}
+
+function getSelectedValue(groupName) {
+    return getSelectionGroup(groupName).find(".selection-button.active").attr("data-selection-value") || "";
+}
+
+function bindSelectionButtons() {
+    $(".selection-button").on("click", function () {
+        const button = $(this);
+        const groupName = button.closest("[data-selection-group]").attr("data-selection-group");
+        const nextValue = button.hasClass("active")
+            ? ""
+            : button.attr("data-selection-value");
+
+        setSelectedValue(groupName, nextValue);
+        syncGoatAvailability();
+    });
+}
+
+function syncGoatAvailability() {
+    const goatButton = getSelectionGroup("difficulty_level").find('[data-selection-value="goat"]');
+    const goatAllowed = getSelectedValue("game_mode") === "diamond_quest";
+
+    if (!goatAllowed && goatButton.hasClass("active")) {
+        setSelectedValue("difficulty_level", "");
+    }
+
+    if (!goatAllowed) {
+        goatButton
+            .prop("disabled", true)
+            .removeClass("active btn-primary text-white btn-outline-secondary")
+            .addClass("btn-secondary disabled opacity-50")
+            .attr("aria-pressed", "false");
+        return;
+    }
+
+    goatButton
+        .prop("disabled", false)
+        .removeClass("btn-secondary disabled opacity-50");
+
+    if (!goatButton.hasClass("active")) {
+        goatButton.addClass("btn-outline-secondary");
+    }
+}
+
+function getStatsFilterValues(groupName) {
+    return $(`.stats-filter-checkbox[data-filter-group="${groupName}"]:checked`).map(function () {
+        return $(this).val();
+    }).get();
+}
+
+function setStatsFilterGroup(groupName, shouldCheck) {
+    $(`.stats-filter-checkbox[data-filter-group="${groupName}"]`).prop("checked", shouldCheck);
+}
+
+function getStatsFilterParams() {
+    return {
+        limit: $("#stats-limit").val(),
+        difficulty_levels: getStatsFilterValues("stats-difficulty-levels").join(","),
+        game_modes: getStatsFilterValues("stats-game-modes").join(",")
+    };
 }
 
 function updateStats(stats) {
@@ -144,7 +268,7 @@ function renderEvents(events) {
     if (!events || events.length === 0) {
         tbody.append(`
             <tr>
-                <td colspan="3" class="text-center text-muted">No events yet</td>
+                <td colspan="5" class="text-center text-muted">No events yet</td>
             </tr>
         `);
         return;
@@ -155,6 +279,8 @@ function renderEvents(events) {
             <tr>
                 <td>${event.id}</td>
                 <td>${formatOutcome(event.outcome)}</td>
+                <td>${formatSelectionLabel(event.difficulty_level, DIFFICULTY_LABELS)}</td>
+                <td>${formatSelectionLabel(event.game_mode, GAME_MODE_LABELS)}</td>
                 <td>${formatTimestamp(event.created_at)}</td>
             </tr>
         `);
@@ -477,12 +603,10 @@ function renderPerformanceChart(events) {
 }
 
 function loadStats() {
-    const statsLimit = $("#stats-limit").val();
-
     $.ajax({
         url: "/api/stats",
         method: "GET",
-        data: { limit: statsLimit },
+        data: getStatsFilterParams(),
         success: function (response) {
             updateStats(response);
         },
@@ -525,20 +649,32 @@ function loadPerformanceChart() {
 }
 
 function submitEvent() {
-    const outcome = $("#outcome").val();
+    const outcome = getSelectedValue("outcome");
+    const difficultyLevel = getSelectedValue("difficulty_level");
+    const gameMode = getSelectedValue("game_mode");
     const statsLimit = $("#stats-limit").val();
     const historyLimit = $("#history-limit").val();
+
+    if (!outcome || !difficultyLevel || !gameMode) {
+        showMessage("Select an outcome, difficulty level, and game mode.", true);
+        return;
+    }
 
     $.ajax({
         url: `/api/events?stats_limit=${encodeURIComponent(statsLimit)}&history_limit=${encodeURIComponent(historyLimit)}`,
         method: "POST",
         contentType: "application/json",
-        data: JSON.stringify({ outcome: outcome }),
+        data: JSON.stringify({
+            outcome: outcome,
+            difficulty_level: difficultyLevel,
+            game_mode: gameMode
+        }),
         dataType: "json",
         success: function (response) {
-            updateStats(response.stats);
+            loadStats();
             renderEvents(response.events);
             loadPerformanceChart();
+            setSelectedValue("outcome", "");
             showMessage(response.message || "Event recorded.");
         },
         error: function (xhr) {
@@ -556,7 +692,7 @@ function deleteLastEvent() {
         url: `/api/events/last?stats_limit=${encodeURIComponent(statsLimit)}&history_limit=${encodeURIComponent(historyLimit)}`,
         method: "DELETE",
         success: function (response) {
-            updateStats(response.stats);
+            loadStats();
             renderEvents(response.events);
             loadPerformanceChart();
             showMessage(response.message || "Last event deleted.");
@@ -576,7 +712,7 @@ function deleteAllEvents() {
         url: `/api/events?stats_limit=${encodeURIComponent(statsLimit)}&history_limit=${encodeURIComponent(historyLimit)}`,
         method: "DELETE",
         success: function (response) {
-            updateStats(response.stats);
+            loadStats();
             renderEvents(response.events);
             loadPerformanceChart();
             showMessage(response.message || "All events deleted.");
@@ -589,6 +725,8 @@ function deleteAllEvents() {
 }
 
 $(document).ready(function () {
+    bindSelectionButtons();
+    syncGoatAvailability();
     loadStats();
     loadEvents();
     loadPerformanceChart();
@@ -609,6 +747,20 @@ $(document).ready(function () {
     });
 
     $("#stats-limit").on("change", function () {
+        loadStats();
+    });
+
+    $(".stats-filter-checkbox").on("change", function () {
+        loadStats();
+    });
+
+    $(".filter-select-all").on("click", function () {
+        setStatsFilterGroup($(this).attr("data-filter-group"), true);
+        loadStats();
+    });
+
+    $(".filter-clear-all").on("click", function () {
+        setStatsFilterGroup($(this).attr("data-filter-group"), false);
         loadStats();
     });
 
