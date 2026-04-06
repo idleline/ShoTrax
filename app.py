@@ -34,6 +34,22 @@ class Event(db.Model):
 
 
 VALID_OUTCOMES = {"out", "single", "double", "triple", "home_run"}
+DIFFICULTY_LEVEL_ORDER = [
+    "rookie",
+    "veteran",
+    "all_star",
+    "hall_of_fame",
+    "legend",
+    "goat",
+]
+DIFFICULTY_LEVEL_LABELS = {
+    "rookie": "Rookie",
+    "veteran": "Veteran",
+    "all_star": "All-Star",
+    "hall_of_fame": "Hall of Fame",
+    "legend": "Legend",
+    "goat": "G.O.A.T.",
+}
 VALID_DIFFICULTY_LEVELS = {
     "rookie",
     "veteran",
@@ -41,6 +57,26 @@ VALID_DIFFICULTY_LEVELS = {
     "hall_of_fame",
     "legend",
     "goat",
+}
+GAME_MODE_ORDER = [
+    "conquest",
+    "ranked",
+    "events",
+    "moments",
+    "diamond_quest",
+    "showdown",
+    "vs_cpu",
+    "miniseasons",
+]
+GAME_MODE_LABELS = {
+    "conquest": "Conquest",
+    "ranked": "Ranked",
+    "events": "Events",
+    "moments": "Moments",
+    "diamond_quest": "Diamond Quest",
+    "showdown": "Showdown",
+    "vs_cpu": "vs CPU",
+    "miniseasons": "Miniseasons",
 }
 VALID_GAME_MODES = {
     "conquest",
@@ -85,7 +121,11 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        return render_template("index.html")
+        return render_template("index.html", active_page="home")
+
+    @app.route("/reports")
+    def reports():
+        return render_template("reports.html", active_page="reports")
 
     @app.get("/api/stats")
     def get_stats():
@@ -112,6 +152,10 @@ def create_app() -> Flask:
 
         events = [event.to_dict() for event in query.all()]
         return jsonify({"events": events}), 200
+
+    @app.get("/api/reports")
+    def get_reports():
+        return jsonify(build_reports_payload()), 200
 
     @app.post("/api/events")
     def add_event():
@@ -227,13 +271,7 @@ def fetch_outcomes(
     return [row.outcome for row in query.all()]
 
 
-def calculate_stats(
-    limit: Optional[int] = None,
-    difficulty_levels: list[str] | None = None,
-    game_modes: list[str] | None = None,
-) -> dict:
-    outcomes = fetch_outcomes(limit, difficulty_levels, game_modes)
-
+def calculate_rate_stats_from_outcomes(outcomes: list[str]) -> dict:
     at_bats = len(outcomes)
     singles = outcomes.count("single")
     doubles = outcomes.count("double")
@@ -243,16 +281,11 @@ def calculate_stats(
 
     hits = singles + doubles + triples + home_runs
     total_bases = singles + (2 * doubles) + (3 * triples) + (4 * home_runs)
-
-    # Simplified model:
-    # No BB, HBP, or SF are tracked, so OBP == AVG in this version.
     batting_average = (hits / at_bats) if at_bats else 0.0
-    on_base_percentage = batting_average
     slugging_percentage = (total_bases / at_bats) if at_bats else 0.0
-    ops = on_base_percentage + slugging_percentage
+    ops = batting_average + slugging_percentage
 
     return {
-        "sample_size": "all" if limit is None else limit,
         "at_bats": at_bats,
         "outs": outs,
         "hits": hits,
@@ -262,9 +295,71 @@ def calculate_stats(
         "home_runs": home_runs,
         "total_bases": total_bases,
         "batting_average": f"{batting_average:.3f}",
-        "on_base_percentage": f"{on_base_percentage:.3f}",
         "slugging_percentage": f"{slugging_percentage:.3f}",
         "ops": f"{ops:.3f}",
+    }
+
+
+def calculate_stats(
+    limit: Optional[int] = None,
+    difficulty_levels: list[str] | None = None,
+    game_modes: list[str] | None = None,
+) -> dict:
+    outcomes = fetch_outcomes(limit, difficulty_levels, game_modes)
+    stats = calculate_rate_stats_from_outcomes(outcomes)
+
+    return {
+        "sample_size": "all" if limit is None else limit,
+        **stats,
+        "on_base_percentage": stats["batting_average"],
+    }
+
+
+def build_reports_payload() -> dict:
+    report_events = Event.query.filter(
+        Event.difficulty_level.is_not(None),
+        Event.game_mode.is_not(None),
+    ).all()
+
+    outcomes_by_difficulty = {difficulty: [] for difficulty in DIFFICULTY_LEVEL_ORDER}
+    outcomes_by_mode_and_difficulty = {
+        game_mode: {difficulty: [] for difficulty in DIFFICULTY_LEVEL_ORDER}
+        for game_mode in GAME_MODE_ORDER
+    }
+
+    for event in report_events:
+        if event.difficulty_level not in VALID_DIFFICULTY_LEVELS or event.game_mode not in VALID_GAME_MODES:
+            continue
+
+        outcomes_by_difficulty[event.difficulty_level].append(event.outcome)
+        outcomes_by_mode_and_difficulty[event.game_mode][event.difficulty_level].append(event.outcome)
+
+    difficulties = []
+    for difficulty in DIFFICULTY_LEVEL_ORDER:
+        difficulties.append({
+            "key": difficulty,
+            "label": DIFFICULTY_LEVEL_LABELS[difficulty],
+            **calculate_rate_stats_from_outcomes(outcomes_by_difficulty[difficulty]),
+        })
+
+    game_modes = []
+    for game_mode in GAME_MODE_ORDER:
+        game_modes.append({
+            "key": game_mode,
+            "label": GAME_MODE_LABELS[game_mode],
+            "difficulties": [
+                {
+                    "key": difficulty,
+                    "label": DIFFICULTY_LEVEL_LABELS[difficulty],
+                    **calculate_rate_stats_from_outcomes(outcomes_by_mode_and_difficulty[game_mode][difficulty]),
+                }
+                for difficulty in DIFFICULTY_LEVEL_ORDER
+            ],
+        })
+
+    return {
+        "difficulties": difficulties,
+        "game_modes": game_modes,
     }
 
 
