@@ -189,9 +189,11 @@ def parse_filter_values(value: Optional[str], valid_values: set[str]) -> list[st
     if value == "":
         return []
 
-    parsed_values = [item.strip() for item in value.split(",") if item.strip()]
+    parsed_values = list(dict.fromkeys(item.strip() for item in value.split(",") if item.strip()))
     if any(item not in valid_values for item in parsed_values):
         return "invalid"
+    if set(parsed_values) == valid_values:
+        return None
 
     return parsed_values
 
