@@ -1,5 +1,7 @@
 let opsByDifficultyChart = null;
 let avgByDifficultyChart = null;
+let opsByModeChart = null;
+let avgByModeChart = null;
 
 function displayRate(value) {
     const fixed = Number(value).toFixed(3);
@@ -27,14 +29,14 @@ function destroyChart(chartInstance) {
     }
 }
 
-function buildDifficultyChart(chartId, metricKey, label, color, difficulties) {
+function buildBarChart(chartId, metricKey, label, color, records) {
     const chartElement = document.getElementById(chartId);
-    const dataset = difficulties.map(function (difficulty) {
+    const dataset = records.map(function (record) {
         return {
-            label: difficulty.label,
-            value: Number(difficulty[metricKey]),
-            atBats: difficulty.at_bats,
-            displayValue: displayRate(difficulty[metricKey])
+            label: record.label,
+            value: Number(record[metricKey]),
+            atBats: record.at_bats,
+            displayValue: displayRate(record[metricKey])
         };
     });
 
@@ -103,36 +105,107 @@ function buildDifficultyChart(chartId, metricKey, label, color, difficulties) {
     });
 }
 
-function renderDifficultyCharts(difficulties) {
-    const hasData = difficulties.some(function (difficulty) {
-        return difficulty.at_bats > 0;
+function renderBarChart(chartKey, emptyPrefix, chartId, metricKey, label, color, records) {
+    const hasData = records.some(function (record) {
+        return record.at_bats > 0;
     });
 
-    destroyChart(opsByDifficultyChart);
-    destroyChart(avgByDifficultyChart);
-    opsByDifficultyChart = null;
-    avgByDifficultyChart = null;
+    if (chartKey === "opsByDifficulty") {
+        destroyChart(opsByDifficultyChart);
+        opsByDifficultyChart = null;
+    } else if (chartKey === "avgByDifficulty") {
+        destroyChart(avgByDifficultyChart);
+        avgByDifficultyChart = null;
+    } else if (chartKey === "opsByMode") {
+        destroyChart(opsByModeChart);
+        opsByModeChart = null;
+    } else if (chartKey === "avgByMode") {
+        destroyChart(avgByModeChart);
+        avgByModeChart = null;
+    }
 
-    toggleEmptyState("ops-chart", !hasData);
-    toggleEmptyState("avg-chart", !hasData);
+    toggleEmptyState(emptyPrefix, !hasData);
 
     if (!hasData || typeof Chart === "undefined") {
         return;
     }
 
-    opsByDifficultyChart = buildDifficultyChart(
+    const chartInstance = buildBarChart(chartId, metricKey, label, color, records);
+
+    if (chartKey === "opsByDifficulty") {
+        opsByDifficultyChart = chartInstance;
+    } else if (chartKey === "avgByDifficulty") {
+        avgByDifficultyChart = chartInstance;
+    } else if (chartKey === "opsByMode") {
+        opsByModeChart = chartInstance;
+    } else if (chartKey === "avgByMode") {
+        avgByModeChart = chartInstance;
+    }
+}
+
+function renderDifficultyCharts(difficulties) {
+    renderBarChart(
+        "opsByDifficulty",
+        "ops-chart",
         "ops-by-difficulty-chart",
         "ops",
         "OPS",
-        { background: "rgba(253, 126, 20, 0.72)", border: "#fd7e14" },
+        { background: "rgba(241, 90, 41, 0.72)", border: "#F15A29" },
         difficulties
     );
-    avgByDifficultyChart = buildDifficultyChart(
+    renderBarChart(
+        "avgByDifficulty",
+        "avg-chart",
         "avg-by-difficulty-chart",
         "batting_average",
         "AVG",
         { background: "rgba(13, 110, 253, 0.72)", border: "#0d6efd" },
         difficulties
+    );
+}
+
+function buildModeSummaries(gameModes) {
+    return gameModes.map(function (gameMode) {
+        const totals = gameMode.difficulties.reduce(function (summary, difficulty) {
+            return {
+                atBats: summary.atBats + difficulty.at_bats,
+                hits: summary.hits + Number(difficulty.hits || 0),
+                totalBases: summary.totalBases + Number(difficulty.total_bases || 0)
+            };
+        }, { atBats: 0, hits: 0, totalBases: 0 });
+        const battingAverage = totals.atBats ? totals.hits / totals.atBats : 0;
+        const sluggingPercentage = totals.atBats ? totals.totalBases / totals.atBats : 0;
+
+        return {
+            key: gameMode.key,
+            label: gameMode.label,
+            at_bats: totals.atBats,
+            batting_average: battingAverage.toFixed(3),
+            ops: (battingAverage + sluggingPercentage).toFixed(3)
+        };
+    });
+}
+
+function renderModeCharts(gameModes) {
+    const modeSummaries = buildModeSummaries(gameModes);
+
+    renderBarChart(
+        "opsByMode",
+        "ops-mode-chart",
+        "ops-by-mode-chart",
+        "ops",
+        "OPS",
+        { background: "rgba(241, 90, 41, 0.72)", border: "#F15A29" },
+        modeSummaries
+    );
+    renderBarChart(
+        "avgByMode",
+        "avg-mode-chart",
+        "avg-by-mode-chart",
+        "batting_average",
+        "AVG",
+        { background: "rgba(13, 110, 253, 0.72)", border: "#0d6efd" },
+        modeSummaries
     );
 }
 
@@ -170,10 +243,17 @@ function renderReportsTable(data) {
 
     data.game_modes.forEach(function (gameMode) {
         const cells = gameMode.difficulties.map(function (difficulty) {
+            const battingAverage = difficulty.at_bats > 0
+                ? displayRate(difficulty.batting_average)
+                : "";
+            const ops = difficulty.at_bats > 0
+                ? displayRate(difficulty.ops)
+                : "";
+
             return `
                 <td>${difficulty.at_bats}</td>
-                <td>${displayRate(difficulty.batting_average)}</td>
-                <td>${displayRate(difficulty.ops)}</td>
+                <td>${battingAverage}</td>
+                <td>${ops}</td>
             `;
         }).join("");
 
@@ -195,6 +275,7 @@ function loadReports() {
         .then(function (data) {
             hideReportsError();
             renderDifficultyCharts(data.difficulties || []);
+            renderModeCharts(data.game_modes || []);
             renderReportsTable(data);
         })
         .catch(function (error) {

@@ -1,6 +1,7 @@
 let performanceChart = null;
 let allEventsCache = [];
 let statusMessageTimeoutId = null;
+const PERFORMANCE_ROLLING_DAYS = 7;
 const DIFFICULTY_LABELS = {
     rookie: "Rookie",
     veteran: "Veteran",
@@ -372,18 +373,21 @@ function calculateRunningRates(totals) {
     };
 }
 
-function buildDailyRunningSeries(events) {
+function createEmptyTotals() {
+    return {
+        atBats: 0,
+        hits: 0,
+        totalBases: 0
+    };
+}
+
+function buildDailyRollingSeries(events, rollingDays = PERFORMANCE_ROLLING_DAYS) {
     if (!Array.isArray(events) || events.length === 0) {
         return [];
     }
 
     const sortedEvents = events.slice().sort(compareEventsByTime);
-    const dailySnapshots = new Map();
-    const totals = {
-        atBats: 0,
-        hits: 0,
-        totalBases: 0
-    };
+    const dailyTotals = new Map();
 
     sortedEvents.forEach(function (event) {
         const date = new Date(normalizeUtcTimestamp(event.created_at));
@@ -392,34 +396,45 @@ function buildDailyRunningSeries(events) {
             return;
         }
 
+        const dayKey = getLocalDayKey(date);
+        const totals = dailyTotals.get(dayKey) || createEmptyTotals();
         applyOutcomeToTotals(totals, event.outcome);
-        dailySnapshots.set(getLocalDayKey(date), calculateRunningRates(totals));
+        dailyTotals.set(dayKey, totals);
     });
 
-    if (dailySnapshots.size === 0) {
+    if (dailyTotals.size === 0) {
         return [];
     }
 
-    const dayKeys = Array.from(dailySnapshots.keys());
+    const dayKeys = Array.from(dailyTotals.keys());
     const firstDay = createLocalDateFromKey(dayKeys[0]);
     const lastDay = createLocalDateFromKey(dayKeys[dayKeys.length - 1]);
     const points = [];
-    let latestSnapshot = null;
+    const rollingWindow = [];
+    const rollingTotals = createEmptyTotals();
 
     for (let cursor = new Date(firstDay); cursor <= lastDay; cursor = addDays(cursor, 1)) {
         const dayKey = getLocalDayKey(cursor);
+        const dayTotals = dailyTotals.get(dayKey) || createEmptyTotals();
+        rollingWindow.push(dayTotals);
+        rollingTotals.atBats += dayTotals.atBats;
+        rollingTotals.hits += dayTotals.hits;
+        rollingTotals.totalBases += dayTotals.totalBases;
 
-        if (dailySnapshots.has(dayKey)) {
-            latestSnapshot = dailySnapshots.get(dayKey);
+        if (rollingWindow.length > rollingDays) {
+            const expiredTotals = rollingWindow.shift();
+            rollingTotals.atBats -= expiredTotals.atBats;
+            rollingTotals.hits -= expiredTotals.hits;
+            rollingTotals.totalBases -= expiredTotals.totalBases;
         }
 
-        if (latestSnapshot) {
-            points.push({
-                x: getStartOfLocalDay(cursor),
-                avg: latestSnapshot.avg,
-                ops: latestSnapshot.ops
-            });
-        }
+        const rates = calculateRunningRates(rollingTotals);
+        points.push({
+            x: getStartOfLocalDay(cursor),
+            avg: rates.avg,
+            ops: rates.ops,
+            atBats: rollingTotals.atBats
+        });
     }
 
     return points;
@@ -478,10 +493,10 @@ function renderPerformanceChart(events) {
         return;
     }
 
-    const series = filterSeriesByWindow(buildDailyRunningSeries(events), $("#chart-window").val());
+    const series = filterSeriesByWindow(buildDailyRollingSeries(events), $("#chart-window").val());
 
     if (series.length === 0) {
-        emptyState.text("Add events to see the daily running AVG and OPS trend.");
+        emptyState.text(`Add events to see the ${PERFORMANCE_ROLLING_DAYS}-day rolling AVG and OPS trend.`);
         emptyState.show();
         chartContainer.hide();
         return;
@@ -508,7 +523,7 @@ function renderPerformanceChart(events) {
                     label: "AVG",
                     yAxisID: "yAvg",
                     data: series.map(function (point) {
-                        return { x: point.x, y: point.avg };
+                        return { x: point.x, y: point.avg, atBats: point.atBats };
                     }),
                     borderColor: "#0d6efd",
                     backgroundColor: "rgba(13, 110, 253, 0.12)",
@@ -521,7 +536,7 @@ function renderPerformanceChart(events) {
                     label: "OPS",
                     yAxisID: "yOps",
                     data: series.map(function (point) {
-                        return { x: point.x, y: point.ops };
+                        return { x: point.x, y: point.ops, atBats: point.atBats };
                     }),
                     borderColor: "#fd7e14",
                     backgroundColor: "rgba(253, 126, 20, 0.12)",
@@ -547,6 +562,10 @@ function renderPerformanceChart(events) {
                     callbacks: {
                         label: function (context) {
                             return `${context.dataset.label}: ${formatRateNumber(context.parsed.y)}`;
+                        },
+                        footer: function (tooltipItems) {
+                            const point = tooltipItems[0]?.raw;
+                            return `ABs in ${PERFORMANCE_ROLLING_DAYS}D window: ${point?.atBats ?? 0}`;
                         }
                     }
                 }
