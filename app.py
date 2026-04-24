@@ -181,7 +181,10 @@ def create_app() -> Flask:
         db.session.add(event)
         db.session.commit()
 
-        return jsonify(build_response_payload(f"{format_outcome_label(outcome)} Recorded.")), 201
+        return jsonify({
+            "message": f"{format_outcome_label(outcome)} Recorded.",
+            "event": event.to_dict(),
+        }), 201
 
     @app.delete("/api/events/last")
     def delete_last_event():

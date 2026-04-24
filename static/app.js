@@ -671,8 +671,6 @@ function submitEvent() {
     const outcome = getSelectedValue("outcome");
     const difficultyLevel = getSelectedValue("difficulty_level");
     const gameMode = getSelectedValue("game_mode");
-    const statsLimit = $("#stats-limit").val();
-    const historyLimit = $("#history-limit").val();
 
     if (!outcome || !difficultyLevel || !gameMode) {
         showMessage("Select an outcome, difficulty level, and game mode.", true);
@@ -680,7 +678,7 @@ function submitEvent() {
     }
 
     $.ajax({
-        url: `/api/events?stats_limit=${encodeURIComponent(statsLimit)}&history_limit=${encodeURIComponent(historyLimit)}`,
+        url: "/api/events",
         method: "POST",
         contentType: "application/json",
         data: JSON.stringify({
@@ -691,13 +689,13 @@ function submitEvent() {
         dataType: "json",
         success: function (response) {
             loadStats();
-            renderEvents(response.events);
+            loadEvents();
             loadPerformanceChart();
             setSelectedValue("outcome", "");
             showMessage(response.message || "Event recorded.");
         },
         error: function (xhr) {
-            const message = xhr.responseJSON?.error || "Failed to record event.";
+            const message = xhr.responseJSON?.error || xhr.responseText || "Failed to record event.";
             showMessage(message, true);
         }
     });
