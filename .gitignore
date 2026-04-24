@@ -1,1 +1,3 @@
 *.db
+.nova
+.DS_Store
