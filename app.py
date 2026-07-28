@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import csv
+from io import StringIO
 from datetime import datetime, timezone
 from typing import Optional
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc, false, inspect, text
 
@@ -12,6 +14,29 @@ db = SQLAlchemy()
 
 class Event(db.Model):
     __tablename__ = "events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    outcome = db.Column(db.String(20), nullable=False, index=True)
+    difficulty_level = db.Column(db.String(20), nullable=True, index=True)
+    game_mode = db.Column(db.String(20), nullable=True, index=True)
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "outcome": self.outcome,
+            "difficulty_level": self.difficulty_level,
+            "game_mode": self.game_mode,
+            "created_at": self.created_at.isoformat().replace("+00:00", "Z"),
+        }
+
+
+class BabipEvent(db.Model):
+    __tablename__ = "babip_events"
 
     id = db.Column(db.Integer, primary_key=True)
     outcome = db.Column(db.String(20), nullable=False, index=True)
@@ -96,16 +121,17 @@ def format_outcome_label(outcome: str) -> str:
 
 
 def ensure_event_columns() -> None:
-    existing_columns = {
-        column["name"]
-        for column in inspect(db.engine).get_columns(Event.__tablename__)
-    }
+    for model in (Event, BabipEvent):
+        existing_columns = {
+            column["name"]
+            for column in inspect(db.engine).get_columns(model.__tablename__)
+        }
 
-    with db.engine.begin() as connection:
-        if "difficulty_level" not in existing_columns:
-            connection.execute(text("ALTER TABLE events ADD COLUMN difficulty_level VARCHAR(20)"))
-        if "game_mode" not in existing_columns:
-            connection.execute(text("ALTER TABLE events ADD COLUMN game_mode VARCHAR(20)"))
+        with db.engine.begin() as connection:
+            if "difficulty_level" not in existing_columns:
+                connection.execute(text(f"ALTER TABLE {model.__tablename__} ADD COLUMN difficulty_level VARCHAR(20)"))
+            if "game_mode" not in existing_columns:
+                connection.execute(text(f"ALTER TABLE {model.__tablename__} ADD COLUMN game_mode VARCHAR(20)"))
 
 
 def create_app() -> Flask:
@@ -127,6 +153,19 @@ def create_app() -> Flask:
     def reports():
         return render_template("reports.html", active_page="reports")
 
+    @app.route("/babip")
+    def babip():
+        return render_template(
+            "babip.html",
+            active_page="babip",
+            difficulty_options=[
+                (key, DIFFICULTY_LEVEL_LABELS[key]) for key in DIFFICULTY_LEVEL_ORDER
+            ],
+            game_mode_options=[
+                (key, GAME_MODE_LABELS[key]) for key in GAME_MODE_ORDER
+            ],
+        )
+
     @app.get("/api/stats")
     def get_stats():
         limit = parse_limit(request.args.get("limit", "all"))
@@ -138,7 +177,7 @@ def create_app() -> Flask:
         if game_modes == "invalid":
             return jsonify({"error": "Invalid game mode filter"}), 400
 
-        return jsonify(calculate_stats(limit, difficulty_levels, game_modes)), 200
+        return jsonify(calculate_stats(Event, limit, difficulty_levels, game_modes)), 200
 
     @app.get("/api/events")
     def get_events():
@@ -152,6 +191,10 @@ def create_app() -> Flask:
 
         events = [event.to_dict() for event in query.all()]
         return jsonify({"events": events}), 200
+
+    @app.get("/api/events/export")
+    def export_events():
+        return build_csv_export_response(Event, "shotrax-perfect-perfect-events.csv")
 
     @app.get("/api/reports")
     def get_reports():
@@ -186,6 +229,65 @@ def create_app() -> Flask:
             "event": event.to_dict(),
         }), 201
 
+    @app.get("/api/babip/stats")
+    def get_babip_stats():
+        limit = parse_limit(request.args.get("limit", "all"))
+        if limit == "invalid":
+            return jsonify({"error": "limit must be one of: all, 50, 100, 200, 500"}), 400
+        difficulty_levels, game_modes = parse_stats_filters()
+        if difficulty_levels == "invalid":
+            return jsonify({"error": "Invalid difficulty filter"}), 400
+        if game_modes == "invalid":
+            return jsonify({"error": "Invalid game mode filter"}), 400
+
+        return jsonify(calculate_stats(BabipEvent, limit, difficulty_levels, game_modes)), 200
+
+    @app.get("/api/babip/events")
+    def get_babip_events():
+        limit = parse_limit(request.args.get("limit", "50"))
+        if limit == "invalid":
+            return jsonify({"error": "limit must be one of: all, 50, 100, 200, 500"}), 400
+
+        query = BabipEvent.query.order_by(desc(BabipEvent.id))
+        if isinstance(limit, int):
+            query = query.limit(limit)
+
+        events = [event.to_dict() for event in query.all()]
+        return jsonify({"events": events}), 200
+
+    @app.get("/api/babip/events/export")
+    def export_babip_events():
+        return build_csv_export_response(BabipEvent, "shotrax-babip-events.csv")
+
+    @app.post("/api/babip/events")
+    def add_babip_event():
+        payload = request.get_json(silent=True) or request.form
+        outcome = str(payload.get("outcome", "")).strip().lower()
+        difficulty_level = str(payload.get("difficulty_level", "")).strip().lower()
+        game_mode = str(payload.get("game_mode", "")).strip().lower()
+
+        if outcome not in VALID_OUTCOMES:
+            return jsonify({"error": "Invalid outcome"}), 400
+        if difficulty_level not in VALID_DIFFICULTY_LEVELS:
+            return jsonify({"error": "Invalid difficulty level"}), 400
+        if game_mode not in VALID_GAME_MODES:
+            return jsonify({"error": "Invalid game mode"}), 400
+        if difficulty_level == "goat" and game_mode != "diamond_quest":
+            return jsonify({"error": "G.O.A.T. difficulty is only available for Diamond Quest"}), 400
+
+        event = BabipEvent(
+            outcome=outcome,
+            difficulty_level=difficulty_level,
+            game_mode=game_mode,
+        )
+        db.session.add(event)
+        db.session.commit()
+
+        return jsonify({
+            "message": f"{format_outcome_label(outcome)} Recorded.",
+            "event": event.to_dict(),
+        }), 201
+
     @app.delete("/api/events/last")
     def delete_last_event():
         last_event = Event.query.order_by(desc(Event.id)).first()
@@ -197,7 +299,7 @@ def create_app() -> Flask:
         db.session.delete(last_event)
         db.session.commit()
 
-        payload = build_response_payload("Last event deleted.")
+        payload = build_response_payload(Event, "Last event deleted.")
         payload["deleted_event"] = deleted_event
         return jsonify(payload), 200
 
@@ -206,7 +308,30 @@ def create_app() -> Flask:
         Event.query.delete()
         db.session.commit()
 
-        payload = build_response_payload("All events deleted.")
+        payload = build_response_payload(Event, "All events deleted.")
+        return jsonify(payload), 200
+
+    @app.delete("/api/babip/events/last")
+    def delete_last_babip_event():
+        last_event = BabipEvent.query.order_by(desc(BabipEvent.id)).first()
+
+        if last_event is None:
+            return jsonify({"error": "No BABIP events exist to delete."}), 404
+
+        deleted_event = last_event.to_dict()
+        db.session.delete(last_event)
+        db.session.commit()
+
+        payload = build_response_payload(BabipEvent, "Last BABIP event deleted.")
+        payload["deleted_event"] = deleted_event
+        return jsonify(payload), 200
+
+    @app.delete("/api/babip/events")
+    def delete_all_babip_events():
+        BabipEvent.query.delete()
+        db.session.commit()
+
+        payload = build_response_payload(BabipEvent, "All BABIP events deleted.")
         return jsonify(payload), 200
 
     return app
@@ -251,23 +376,24 @@ def parse_stats_filters() -> tuple[list[str] | None | str, list[str] | None | st
     return difficulty_levels, game_modes
 
 
-def apply_event_filters(query, difficulty_levels: list[str] | None = None, game_modes: list[str] | None = None):
+def apply_event_filters(model, query, difficulty_levels: list[str] | None = None, game_modes: list[str] | None = None):
     if difficulty_levels is not None:
-        query = query.filter(false()) if not difficulty_levels else query.filter(Event.difficulty_level.in_(difficulty_levels))
+        query = query.filter(false()) if not difficulty_levels else query.filter(model.difficulty_level.in_(difficulty_levels))
 
     if game_modes is not None:
-        query = query.filter(false()) if not game_modes else query.filter(Event.game_mode.in_(game_modes))
+        query = query.filter(false()) if not game_modes else query.filter(model.game_mode.in_(game_modes))
 
     return query
 
 
 def fetch_outcomes(
+    model,
     limit: Optional[int] = None,
     difficulty_levels: list[str] | None = None,
     game_modes: list[str] | None = None,
 ) -> list[str]:
-    query = Event.query.with_entities(Event.outcome).order_by(desc(Event.id))
-    query = apply_event_filters(query, difficulty_levels, game_modes)
+    query = model.query.with_entities(model.outcome).order_by(desc(model.id))
+    query = apply_event_filters(model, query, difficulty_levels, game_modes)
     if isinstance(limit, int):
         query = query.limit(limit)
 
@@ -304,11 +430,12 @@ def calculate_rate_stats_from_outcomes(outcomes: list[str]) -> dict:
 
 
 def calculate_stats(
+    model,
     limit: Optional[int] = None,
     difficulty_levels: list[str] | None = None,
     game_modes: list[str] | None = None,
 ) -> dict:
-    outcomes = fetch_outcomes(limit, difficulty_levels, game_modes)
+    outcomes = fetch_outcomes(model, limit, difficulty_levels, game_modes)
     stats = calculate_rate_stats_from_outcomes(outcomes)
 
     return {
@@ -366,7 +493,7 @@ def build_reports_payload() -> dict:
     }
 
 
-def build_response_payload(message: str) -> dict:
+def build_response_payload(model, message: str) -> dict:
     stats_limit = parse_limit(request.args.get("stats_limit", "all"))
     if stats_limit == "invalid":
         stats_limit = None
@@ -381,9 +508,9 @@ def build_response_payload(message: str) -> dict:
     if game_modes == "invalid":
         game_modes = None
 
-    stats = calculate_stats(stats_limit, difficulty_levels, game_modes)
+    stats = calculate_stats(model, stats_limit, difficulty_levels, game_modes)
 
-    events_query = Event.query.order_by(desc(Event.id))
+    events_query = model.query.order_by(desc(model.id))
     if isinstance(history_limit, int):
         events_query = events_query.limit(history_limit)
 
@@ -394,6 +521,27 @@ def build_response_payload(message: str) -> dict:
         "stats": stats,
         "events": events,
     }
+
+
+def build_csv_export_response(model, filename: str) -> Response:
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "outcome", "difficulty_level", "game_mode", "created_at"])
+
+    for event in model.query.order_by(model.id).all():
+        writer.writerow([
+            event.id,
+            event.outcome,
+            event.difficulty_level or "",
+            event.game_mode or "",
+            event.created_at.isoformat().replace("+00:00", "Z"),
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 app = create_app()

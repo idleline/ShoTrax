@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ShoTrax</title>
+    <title>ShoTrax BABIP</title>
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
 
     <link
@@ -38,10 +38,10 @@
         <div class="shotrax-hero">
             <div class="row align-items-center g-4">
                 <div class="col-lg-8">
-                    <span class="shotrax-kicker">Performance Tracker</span>
-                    <h1 class="mb-2">ShoTrax Perfect Perfect Tracking</h1>
+                    <span class="shotrax-kicker">Balls In Play</span>
+                    <h1 class="mb-2">BABIP Tracking</h1>
                     <p class="mb-0">
-                        Tracking Perfect Perfect results, segmented by difficulty and game mode, while keeping the core batting metrics visible at a glance.
+                        Track every ball hit into play by outcome, difficulty, and game mode with AVG, SLG, OPS, and outcome percentages.
                     </p>
                 </div>
                 <div class="col-lg-4 text-lg-end">
@@ -60,7 +60,7 @@
                     <div class="card-body">
                         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
                             <div>
-                                <h4 class="card-title mb-1">Performance Trend</h4>
+                                <h4 class="card-title mb-1">BABIP Trend</h4>
                                 <div class="text-muted small">7-day rolling AVG and OPS in your local timezone.</div>
                             </div>
 
@@ -79,11 +79,11 @@
                         </div>
 
                         <div id="performance-chart-empty" class="text-center text-muted py-5">
-                            Add events to see the 7-day rolling AVG and OPS trend.
+                            Add BABIP events to see the 7-day rolling AVG and OPS trend.
                         </div>
 
                         <div id="performance-chart-container" style="height: 320px; display: none;">
-                            <canvas id="performance-chart" aria-label="7-day rolling AVG and OPS chart"></canvas>
+                            <canvas id="performance-chart" aria-label="7-day rolling BABIP AVG and OPS chart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -92,41 +92,33 @@
             <div class="col-12">
                 <div class="card shadow-sm">
                     <div class="card-body">
-                        <h4 class="card-title mb-3">Add Outcome</h4>
+                        <h4 class="card-title mb-3">Add Ball In Play</h4>
 
                         <div class="row g-4">
                             <div class="col-lg-5">
                                 <div class="form-label mb-2">Game Mode</div>
                                 <div class="d-flex flex-wrap gap-2" data-selection-group="game_mode">
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="conquest" aria-pressed="false">Conquest</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="ranked" aria-pressed="false">Ranked</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="events" aria-pressed="false">Events</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="moments" aria-pressed="false">Moments</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="diamond_quest" aria-pressed="false">Diamond Quest</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="showdown" aria-pressed="false">Showdown</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="vs_cpu" aria-pressed="false">vs CPU</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="miniseasons" aria-pressed="false">Miniseasons</button>
+                                    {% for value, label in game_mode_options %}
+                                        <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="{{ value }}" aria-pressed="false">{{ label }}</button>
+                                    {% endfor %}
                                 </div>
                             </div>
                             <div class="col-lg-4">
                                 <div class="form-label mb-2">Difficulty Level</div>
                                 <div class="d-flex flex-wrap gap-2" data-selection-group="difficulty_level">
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="rookie" aria-pressed="false">Rookie</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="veteran" aria-pressed="false">Veteran</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="all_star" aria-pressed="false">All-Star</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="hall_of_fame" aria-pressed="false">Hall of Fame</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="legend" aria-pressed="false">Legend</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="goat" aria-pressed="false">G.O.A.T.</button>
+                                    {% for value, label in difficulty_options %}
+                                        <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="{{ value }}" aria-pressed="false">{{ label }}</button>
+                                    {% endfor %}
                                 </div>
                             </div>
                             <div class="col-lg-3">
                                 <div class="form-label mb-2">Outcome</div>
                                 <div class="d-flex flex-wrap gap-2" data-selection-group="outcome">
                                     <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="out" aria-pressed="false">Out</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="single" aria-pressed="false">Single</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="double" aria-pressed="false">Double</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="triple" aria-pressed="false">Triple</button>
-                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="home_run" aria-pressed="false">Home Run</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="single" aria-pressed="false">1B</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="double" aria-pressed="false">2B</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="triple" aria-pressed="false">3B</button>
+                                    <button type="button" class="btn btn-outline-secondary selection-button" data-selection-value="home_run" aria-pressed="false">HR</button>
                                 </div>
                                 <div class="d-flex flex-wrap gap-2 mt-4">
                                     <button id="submit-event" class="btn btn-primary">Submit</button>
@@ -170,7 +162,7 @@
                             <div class="col-sm-6 col-xl-2">
                                 <div class="card bg-body-tertiary">
                                     <div class="card-body">
-                                        <div class="text-muted small">At-Bats</div>
+                                        <div class="text-muted small">Balls In Play</div>
                                         <div id="stat-at-bats" class="fs-4 fw-bold">0</div>
                                     </div>
                                 </div>
@@ -217,21 +209,28 @@
 
                         <div class="row g-3">
                             <div class="col-lg-2 col-md-4 col-6">
-                                <div class="text-muted small">Singles</div>
+                                <div class="text-muted small">Outs</div>
+                                <div class="d-flex align-items-baseline gap-2">
+                                    <div id="stat-outs" class="fw-semibold">0</div>
+                                    <div id="stat-outs-share" class="text-muted small">0.0%</div>
+                                </div>
+                            </div>
+                            <div class="col-lg-2 col-md-4 col-6">
+                                <div class="text-muted small">1B</div>
                                 <div class="d-flex align-items-baseline gap-2">
                                     <div id="stat-singles" class="fw-semibold">0</div>
                                     <div id="stat-singles-share" class="text-muted small">0.0%</div>
                                 </div>
                             </div>
                             <div class="col-lg-2 col-md-4 col-6">
-                                <div class="text-muted small">Doubles</div>
+                                <div class="text-muted small">2B</div>
                                 <div class="d-flex align-items-baseline gap-2">
                                     <div id="stat-doubles" class="fw-semibold">0</div>
                                     <div id="stat-doubles-share" class="text-muted small">0.0%</div>
                                 </div>
                             </div>
                             <div class="col-lg-2 col-md-4 col-6">
-                                <div class="text-muted small">Triples</div>
+                                <div class="text-muted small">3B</div>
                                 <div class="d-flex align-items-baseline gap-2">
                                     <div id="stat-triples" class="fw-semibold">0</div>
                                     <div id="stat-triples-share" class="text-muted small">0.0%</div>
@@ -242,13 +241,6 @@
                                 <div class="d-flex align-items-baseline gap-2">
                                     <div id="stat-home-runs" class="fw-semibold">0</div>
                                     <div id="stat-home-runs-share" class="text-muted small">0.0%</div>
-                                </div>
-                            </div>
-                            <div class="col-lg-2 col-md-4 col-6">
-                                <div class="text-muted small">Outs</div>
-                                <div class="d-flex align-items-baseline gap-2">
-                                    <div id="stat-outs" class="fw-semibold">0</div>
-                                    <div id="stat-outs-share" class="text-muted small">0.0%</div>
                                 </div>
                             </div>
                             <div class="col-lg-2 col-md-4 col-6">
@@ -273,42 +265,14 @@
                                     </div>
                                 </div>
                                 <div class="row g-2">
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="rookie" id="stats-difficulty-rookie" data-filter-group="stats-difficulty-levels" checked>
-                                            <label class="form-check-label" for="stats-difficulty-rookie">Rookie</label>
+                                    {% for value, label in difficulty_options %}
+                                        <div class="col-sm-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input stats-filter-checkbox" type="checkbox" value="{{ value }}" id="stats-difficulty-{{ value|replace('_', '-') }}" data-filter-group="stats-difficulty-levels" checked>
+                                                <label class="form-check-label" for="stats-difficulty-{{ value|replace('_', '-') }}">{{ label }}</label>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="veteran" id="stats-difficulty-veteran" data-filter-group="stats-difficulty-levels" checked>
-                                            <label class="form-check-label" for="stats-difficulty-veteran">Veteran</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="all_star" id="stats-difficulty-all-star" data-filter-group="stats-difficulty-levels" checked>
-                                            <label class="form-check-label" for="stats-difficulty-all-star">All-Star</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="hall_of_fame" id="stats-difficulty-hall-of-fame" data-filter-group="stats-difficulty-levels" checked>
-                                            <label class="form-check-label" for="stats-difficulty-hall-of-fame">Hall of Fame</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="legend" id="stats-difficulty-legend" data-filter-group="stats-difficulty-levels" checked>
-                                            <label class="form-check-label" for="stats-difficulty-legend">Legend</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="goat" id="stats-difficulty-goat" data-filter-group="stats-difficulty-levels" checked>
-                                            <label class="form-check-label" for="stats-difficulty-goat">G.O.A.T.</label>
-                                        </div>
-                                    </div>
+                                    {% endfor %}
                                 </div>
                             </div>
 
@@ -321,54 +285,14 @@
                                     </div>
                                 </div>
                                 <div class="row g-2">
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="conquest" id="stats-game-mode-conquest" data-filter-group="stats-game-modes" checked>
-                                            <label class="form-check-label" for="stats-game-mode-conquest">Conquest</label>
+                                    {% for value, label in game_mode_options %}
+                                        <div class="col-sm-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input stats-filter-checkbox" type="checkbox" value="{{ value }}" id="stats-game-mode-{{ value|replace('_', '-') }}" data-filter-group="stats-game-modes" checked>
+                                                <label class="form-check-label" for="stats-game-mode-{{ value|replace('_', '-') }}">{{ label }}</label>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="ranked" id="stats-game-mode-ranked" data-filter-group="stats-game-modes" checked>
-                                            <label class="form-check-label" for="stats-game-mode-ranked">Ranked</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="events" id="stats-game-mode-events" data-filter-group="stats-game-modes" checked>
-                                            <label class="form-check-label" for="stats-game-mode-events">Events</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="moments" id="stats-game-mode-moments" data-filter-group="stats-game-modes" checked>
-                                            <label class="form-check-label" for="stats-game-mode-moments">Moments</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="diamond_quest" id="stats-game-mode-diamond-quest" data-filter-group="stats-game-modes" checked>
-                                            <label class="form-check-label" for="stats-game-mode-diamond-quest">Diamond Quest</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="showdown" id="stats-game-mode-showdown" data-filter-group="stats-game-modes" checked>
-                                            <label class="form-check-label" for="stats-game-mode-showdown">Showdown</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="vs_cpu" id="stats-game-mode-vs-cpu" data-filter-group="stats-game-modes" checked>
-                                            <label class="form-check-label" for="stats-game-mode-vs-cpu">vs CPU</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="form-check">
-                                            <input class="form-check-input stats-filter-checkbox" type="checkbox" value="miniseasons" id="stats-game-mode-miniseasons" data-filter-group="stats-game-modes" checked>
-                                            <label class="form-check-label" for="stats-game-mode-miniseasons">Miniseasons</label>
-                                        </div>
-                                    </div>
+                                    {% endfor %}
                                 </div>
                             </div>
                         </div>
@@ -381,11 +305,11 @@
             <div class="col">
                 <div class="card shadow-sm">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h4 class="card-title mb-0">Event History</h4>
+                        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+                            <h4 class="card-title mb-0">BABIP History</h4>
 
                             <div class="d-flex align-items-center gap-2">
-                                <a class="btn btn-sm btn-outline-secondary" href="/api/events/export">Export All</a>
+                                <a class="btn btn-sm btn-outline-secondary" href="/api/babip/events/export">Export All</a>
                                 <label for="history-limit" class="form-label mb-0">Show</label>
                                 <select id="history-limit" class="form-select form-select-sm" style="width: auto;">
                                     <option value="50" selected>50</option>
@@ -410,7 +334,7 @@
                                 </thead>
                                 <tbody id="events-table-body">
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted">No events yet</td>
+                                        <td colspan="5" class="text-center text-muted">No BABIP events yet</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -422,7 +346,7 @@
 
         <div class="row mt-4">
             <div class="col text-center">
-                <button id="delete-all-events" class="btn btn-outline-danger px-4">Delete All Events</button>
+                <button id="delete-all-events" class="btn btn-outline-danger px-4">Delete All BABIP Events</button>
             </div>
         </div>
     </div>
@@ -432,8 +356,15 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script>
         window.SHOTRAX_TRACKER = {
-            apiBase: "/api",
-            deleteAllConfirmation: "Delete all recorded Perfect Perfect events?"
+            apiBase: "/api/babip",
+            deleteAllConfirmation: "Delete all recorded BABIP events?",
+            outcomeLabels: {
+                out: "Out",
+                single: "1B",
+                double: "2B",
+                triple: "3B",
+                home_run: "HR"
+            }
         };
     </script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>

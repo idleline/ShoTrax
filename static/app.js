@@ -2,6 +2,10 @@ let performanceChart = null;
 let allEventsCache = [];
 let statusMessageTimeoutId = null;
 const PERFORMANCE_ROLLING_DAYS = 7;
+const TRACKER_CONFIG = window.SHOTRAX_TRACKER || {};
+const API_BASE = TRACKER_CONFIG.apiBase || "/api";
+const OUTCOME_LABELS = TRACKER_CONFIG.outcomeLabels || {};
+const DELETE_ALL_CONFIRMATION = TRACKER_CONFIG.deleteAllConfirmation || "Delete all recorded events?";
 const DIFFICULTY_LABELS = {
     rookie: "Rookie",
     veteran: "Veteran",
@@ -72,6 +76,10 @@ function formatTimestamp(isoString) {
 }
 
 function formatOutcome(outcome) {
+    if (OUTCOME_LABELS[outcome]) {
+        return OUTCOME_LABELS[outcome];
+    }
+
     return outcome
         .replaceAll("_", " ")
         .replace(/\b\w/g, function (char) {
@@ -623,7 +631,7 @@ function renderPerformanceChart(events) {
 
 function loadStats() {
     $.ajax({
-        url: "/api/stats",
+        url: `${API_BASE}/stats`,
         method: "GET",
         data: getStatsFilterParams(),
         success: function (response) {
@@ -639,7 +647,7 @@ function loadEvents() {
     const historyLimit = $("#history-limit").val();
 
     $.ajax({
-        url: "/api/events",
+        url: `${API_BASE}/events`,
         method: "GET",
         data: { limit: historyLimit },
         success: function (response) {
@@ -653,7 +661,7 @@ function loadEvents() {
 
 function loadPerformanceChart() {
     $.ajax({
-        url: "/api/events",
+        url: `${API_BASE}/events`,
         method: "GET",
         data: { limit: "all" },
         success: function (response) {
@@ -678,7 +686,7 @@ function submitEvent() {
     }
 
     $.ajax({
-        url: "/api/events",
+        url: `${API_BASE}/events`,
         method: "POST",
         contentType: "application/json",
         data: JSON.stringify({
@@ -706,7 +714,7 @@ function deleteLastEvent() {
     const historyLimit = $("#history-limit").val();
 
     $.ajax({
-        url: `/api/events/last?stats_limit=${encodeURIComponent(statsLimit)}&history_limit=${encodeURIComponent(historyLimit)}`,
+        url: `${API_BASE}/events/last?stats_limit=${encodeURIComponent(statsLimit)}&history_limit=${encodeURIComponent(historyLimit)}`,
         method: "DELETE",
         success: function (response) {
             loadStats();
@@ -726,7 +734,7 @@ function deleteAllEvents() {
     const historyLimit = $("#history-limit").val();
 
     $.ajax({
-        url: `/api/events?stats_limit=${encodeURIComponent(statsLimit)}&history_limit=${encodeURIComponent(historyLimit)}`,
+        url: `${API_BASE}/events?stats_limit=${encodeURIComponent(statsLimit)}&history_limit=${encodeURIComponent(historyLimit)}`,
         method: "DELETE",
         success: function (response) {
             loadStats();
@@ -757,7 +765,7 @@ $(document).ready(function () {
     });
 
     $("#delete-all-events").on("click", function () {
-        const confirmed = window.confirm("Delete all recorded events?");
+        const confirmed = window.confirm(DELETE_ALL_CONFIRMATION);
         if (confirmed) {
             deleteAllEvents();
         }

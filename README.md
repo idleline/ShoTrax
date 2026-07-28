@@ -1,6 +1,7 @@
 # ShoTrax
 
 ShoTrax is a small Flask web app for tracking Perfect Perfect batting outcomes and viewing summary reports.
+It also includes a BABIP page for tracking balls hit into play by outcome, game mode, and difficulty.
 
 ## Quick Install
 
@@ -35,6 +36,12 @@ The service runs on port `8000` and creates its SQLite database automatically if
 After the server starts, open:
 
 - `http://127.0.0.1:8000/` for the main ShoTrax page
+- `http://127.0.0.1:8000/babip` for BABIP tracking
 - `http://127.0.0.1:8000/reports` for the reports view
 
 You can also use `http://localhost:8000/` if you prefer.
+
+## Data Exports
+
+- Perfect Perfect CSV: `http://127.0.0.1:8000/api/events/export`
+- BABIP CSV: `http://127.0.0.1:8000/api/babip/events/export`
