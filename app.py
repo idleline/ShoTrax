@@ -9,6 +9,8 @@ from flask import Flask, Response, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc, false, inspect, text
 
+from program_parser import parse_mlb26_program_html
+
 db = SQLAlchemy()
 
 
@@ -56,6 +58,73 @@ class BabipEvent(db.Model):
             "game_mode": self.game_mode,
             "created_at": self.created_at.isoformat().replace("+00:00", "Z"),
         }
+
+
+class Program(db.Model):
+    __tablename__ = "programs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False)
+    description = db.Column(db.Text, nullable=False, default="")
+    total_stars = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    categories = db.relationship(
+        "ProgramCategory",
+        back_populates="program",
+        cascade="all, delete-orphan",
+        order_by="ProgramCategory.sort_order, ProgramCategory.id",
+    )
+
+
+class ProgramCategory(db.Model):
+    __tablename__ = "program_categories"
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = db.Column(db.String(160), nullable=False)
+    description = db.Column(db.Text, nullable=False, default="")
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    program = db.relationship("Program", back_populates="categories")
+    tasks = db.relationship(
+        "ProgramTask",
+        back_populates="category",
+        cascade="all, delete-orphan",
+        order_by="ProgramTask.sort_order, ProgramTask.id",
+    )
+
+
+class ProgramTask(db.Model):
+    __tablename__ = "program_tasks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    category_id = db.Column(
+        db.Integer,
+        db.ForeignKey("program_categories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False, default="")
+    target_value = db.Column(db.Integer, nullable=False)
+    current_value = db.Column(db.Integer, nullable=False, default=0)
+    reward_stars = db.Column(db.Integer, nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    category = db.relationship("ProgramCategory", back_populates="tasks")
 
 
 VALID_OUTCOMES = {"out", "single", "double", "triple", "home_run"}
@@ -134,10 +203,13 @@ def ensure_event_columns() -> None:
                 connection.execute(text(f"ALTER TABLE {model.__tablename__} ADD COLUMN game_mode VARCHAR(20)"))
 
 
-def create_app() -> Flask:
+def create_app(config: Optional[dict] = None) -> Flask:
     app = Flask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///baseball_hits.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+    if config:
+        app.config.update(config)
 
     db.init_app(app)
 
@@ -165,6 +237,277 @@ def create_app() -> Flask:
                 (key, GAME_MODE_LABELS[key]) for key in GAME_MODE_ORDER
             ],
         )
+
+    @app.route("/programs")
+    def programs():
+        return render_template("programs.html", active_page="programs")
+
+    @app.route("/programs/manage")
+    def manage_programs():
+        return render_template("program_manage.html", active_page="programs")
+
+    @app.get("/api/programs")
+    def get_programs():
+        return jsonify({
+            "programs": [
+                serialize_program(program, include_categories=False)
+                for program in Program.query.order_by(desc(Program.updated_at), Program.name).all()
+            ]
+        }), 200
+
+    @app.get("/api/programs/<int:program_id>")
+    def get_program(program_id: int):
+        program = db.get_or_404(Program, program_id)
+        return jsonify({"program": serialize_program(program)}), 200
+
+    @app.post("/api/programs")
+    def add_program():
+        payload = request.get_json(silent=True) or {}
+        errors = validate_program_payload(payload, require_task=True)
+        if errors:
+            return jsonify({"error": errors[0], "errors": errors}), 400
+
+        program = Program(
+            name=clean_text(payload.get("name")),
+            description=clean_text(payload.get("description")),
+            total_stars=int(payload["total_stars"]),
+        )
+        db.session.add(program)
+
+        initial_task = payload.get("initial_task") or {}
+        category = ProgramCategory(
+            program=program,
+            name=clean_text(initial_task.get("category")),
+            sort_order=0,
+        )
+        db.session.add(category)
+        db.session.add(ProgramTask(
+            category=category,
+            title=clean_text(initial_task.get("title")),
+            description=clean_text(initial_task.get("description")),
+            target_value=int(initial_task["target_value"]),
+            reward_stars=int(initial_task["reward_stars"]),
+            current_value=0,
+            sort_order=0,
+        ))
+        db.session.commit()
+        return jsonify({
+            "message": "Program created.",
+            "program": serialize_program(program),
+        }), 201
+
+    @app.patch("/api/programs/<int:program_id>")
+    def update_program(program_id: int):
+        program = db.get_or_404(Program, program_id)
+        payload = request.get_json(silent=True) or {}
+
+        name = clean_text(payload.get("name", program.name))
+        description = clean_text(payload.get("description", program.description))
+        total_stars = parse_positive_int(payload.get("total_stars", program.total_stars))
+        if not name:
+            return jsonify({"error": "Program name is required."}), 400
+        if total_stars is None:
+            return jsonify({"error": "Total stars must be a positive whole number."}), 400
+
+        program.name = name
+        program.description = description
+        program.total_stars = total_stars
+        db.session.commit()
+        return jsonify({
+            "message": "Program updated.",
+            "program": serialize_program(program),
+        }), 200
+
+    @app.delete("/api/programs/<int:program_id>")
+    def delete_program(program_id: int):
+        program = db.get_or_404(Program, program_id)
+        program_name = program.name
+        db.session.delete(program)
+        db.session.commit()
+        return jsonify({"message": f"{program_name} deleted."}), 200
+
+    @app.post("/api/programs/<int:program_id>/tasks")
+    def add_program_task(program_id: int):
+        program = db.get_or_404(Program, program_id)
+        payload = request.get_json(silent=True) or {}
+        errors = validate_task_payload(payload)
+        if errors:
+            return jsonify({"error": errors[0], "errors": errors}), 400
+
+        category_name = clean_text(payload.get("category"))
+        category = next(
+            (
+                candidate
+                for candidate in program.categories
+                if candidate.name.casefold() == category_name.casefold()
+            ),
+            None,
+        )
+        if category is None:
+            category = ProgramCategory(
+                program=program,
+                name=category_name,
+                sort_order=len(program.categories),
+            )
+            db.session.add(category)
+
+        task = ProgramTask(
+            category=category,
+            title=clean_text(payload.get("title")),
+            description=clean_text(payload.get("description")),
+            target_value=int(payload["target_value"]),
+            reward_stars=int(payload["reward_stars"]),
+            current_value=0,
+            sort_order=len(category.tasks),
+        )
+        db.session.add(task)
+        program.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return jsonify({
+            "message": "Task added.",
+            "program": serialize_program(program),
+        }), 201
+
+    @app.patch("/api/program-tasks/<int:task_id>")
+    def update_program_task(task_id: int):
+        task = db.get_or_404(ProgramTask, task_id)
+        payload = request.get_json(silent=True) or {}
+
+        title = clean_text(payload.get("title", task.title))
+        description = clean_text(payload.get("description", task.description))
+        target_value = parse_positive_int(payload.get("target_value", task.target_value))
+        reward_stars = parse_nonnegative_int(payload.get("reward_stars", task.reward_stars))
+        current_value = parse_nonnegative_int(payload.get("current_value", task.current_value))
+        category_name = clean_text(payload.get("category", task.category.name))
+        if not title or not category_name:
+            return jsonify({"error": "Category and task name are required."}), 400
+        if target_value is None or reward_stars is None or current_value is None:
+            return jsonify({"error": "Task values must be valid whole numbers."}), 400
+
+        program = task.category.program
+        if category_name.casefold() != task.category.name.casefold():
+            category = next(
+                (
+                    candidate
+                    for candidate in program.categories
+                    if candidate.name.casefold() == category_name.casefold()
+                ),
+                None,
+            )
+            if category is None:
+                category = ProgramCategory(
+                    program=program,
+                    name=category_name,
+                    sort_order=len(program.categories),
+                )
+                db.session.add(category)
+            task.category = category
+            task.sort_order = len(category.tasks)
+
+        task.title = title
+        task.description = description
+        task.target_value = target_value
+        task.reward_stars = reward_stars
+        task.current_value = min(current_value, target_value)
+        program.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return jsonify({
+            "message": "Task updated.",
+            "program": serialize_program(program),
+        }), 200
+
+    @app.post("/api/program-tasks/<int:task_id>/progress")
+    def update_task_progress(task_id: int):
+        task = db.get_or_404(ProgramTask, task_id)
+        payload = request.get_json(silent=True) or {}
+        current_value = parse_nonnegative_int(payload.get("current_value"))
+        if current_value is None:
+            return jsonify({"error": "Progress must be a non-negative whole number."}), 400
+
+        task.current_value = min(current_value, task.target_value)
+        task.category.program.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return jsonify({
+            "message": "Progress updated.",
+            "program": serialize_program(task.category.program),
+        }), 200
+
+    @app.delete("/api/program-tasks/<int:task_id>")
+    def delete_program_task(task_id: int):
+        task = db.get_or_404(ProgramTask, task_id)
+        program = task.category.program
+        category = task.category
+        db.session.delete(task)
+        db.session.flush()
+        if ProgramTask.query.filter_by(category_id=category.id).first() is None:
+            db.session.delete(category)
+        program.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return jsonify({
+            "message": "Task removed.",
+            "program": serialize_program(program),
+        }), 200
+
+    @app.post("/api/programs/import-preview")
+    def preview_program_import():
+        payload = request.get_json(silent=True) or {}
+        html = str(payload.get("html", ""))
+        if not html.strip():
+            return jsonify({"error": "Paste MLB26 program HTML to preview."}), 400
+
+        categories = parse_mlb26_program_html(html)
+        task_count = sum(len(category["tasks"]) for category in categories)
+        if not categories or not task_count:
+            return jsonify({
+                "error": "No MLB26 program categories and tasks were found in that HTML."
+            }), 400
+        return jsonify({
+            "categories": categories,
+            "category_count": len(categories),
+            "task_count": task_count,
+        }), 200
+
+    @app.post("/api/programs/import")
+    def import_program():
+        payload = request.get_json(silent=True) or {}
+        name = clean_text(payload.get("name"))
+        description = clean_text(payload.get("description"))
+        total_stars = parse_positive_int(payload.get("total_stars"))
+        html = str(payload.get("html", ""))
+        if not name:
+            return jsonify({"error": "Program name is required."}), 400
+        if total_stars is None:
+            return jsonify({"error": "Total stars must be a positive whole number."}), 400
+
+        categories = parse_mlb26_program_html(html)
+        task_count = sum(len(category["tasks"]) for category in categories)
+        if not categories or not task_count:
+            return jsonify({
+                "error": "No MLB26 program categories and tasks were found in that HTML."
+            }), 400
+
+        program = Program(name=name, description=description, total_stars=total_stars)
+        db.session.add(program)
+        for category_index, category_data in enumerate(categories):
+            category = ProgramCategory(
+                program=program,
+                name=category_data["name"],
+                description=category_data["description"],
+                sort_order=category_index,
+            )
+            db.session.add(category)
+            for task_index, task_data in enumerate(category_data["tasks"]):
+                db.session.add(ProgramTask(
+                    category=category,
+                    sort_order=task_index,
+                    **task_data,
+                ))
+
+        db.session.commit()
+        return jsonify({
+            "message": f"Imported {task_count} tasks across {len(categories)} categories.",
+            "program": serialize_program(program),
+        }), 201
 
     @app.get("/api/stats")
     def get_stats():
@@ -542,6 +885,128 @@ def build_csv_export_response(model, filename: str) -> Response:
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+def clean_text(value) -> str:
+    return str(value or "").strip()
+
+
+def parse_positive_int(value) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if 0 < parsed <= 1_000_000 else None
+
+
+def parse_nonnegative_int(value) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if 0 <= parsed <= 1_000_000 else None
+
+
+def validate_task_payload(payload: dict) -> list[str]:
+    errors: list[str] = []
+    if not clean_text(payload.get("category")):
+        errors.append("Category is required.")
+    if not clean_text(payload.get("title")):
+        errors.append("Task name is required.")
+    if parse_positive_int(payload.get("target_value")) is None:
+        errors.append("Task value must be a positive whole number.")
+    if parse_nonnegative_int(payload.get("reward_stars")) is None:
+        errors.append("Reward stars must be a non-negative whole number.")
+    return errors
+
+
+def validate_program_payload(payload: dict, require_task: bool = False) -> list[str]:
+    errors: list[str] = []
+    if not clean_text(payload.get("name")):
+        errors.append("Program name is required.")
+    if parse_positive_int(payload.get("total_stars")) is None:
+        errors.append("Total stars must be a positive whole number.")
+    if require_task:
+        errors.extend(validate_task_payload(payload.get("initial_task") or {}))
+    return errors
+
+
+def serialize_task(task: ProgramTask) -> dict:
+    completed = task.current_value >= task.target_value
+    return {
+        "id": task.id,
+        "category_id": task.category_id,
+        "category": task.category.name,
+        "title": task.title,
+        "description": task.description,
+        "target_value": task.target_value,
+        "current_value": task.current_value,
+        "reward_stars": task.reward_stars,
+        "completed": completed,
+        "progress_percent": round(min(100, (task.current_value / task.target_value) * 100), 1),
+    }
+
+
+def serialize_program(program: Program, include_categories: bool = True) -> dict:
+    tasks = [task for category in program.categories for task in category.tasks]
+    completed_tasks = [task for task in tasks if task.current_value >= task.target_value]
+    earned_stars = sum(task.reward_stars for task in completed_tasks)
+    available_stars = sum(task.reward_stars for task in tasks)
+    remaining_stars = max(0, program.total_stars - earned_stars)
+    progress_percent = round(
+        min(100, (earned_stars / program.total_stars) * 100),
+        1,
+    )
+
+    payload = {
+        "id": program.id,
+        "name": program.name,
+        "description": program.description,
+        "total_stars": program.total_stars,
+        "earned_stars": earned_stars,
+        "available_stars": available_stars,
+        "remaining_stars": remaining_stars,
+        "progress_percent": progress_percent,
+        "task_count": len(tasks),
+        "completed_task_count": len(completed_tasks),
+        "category_count": len(program.categories),
+        "status": (
+            "Complete"
+            if earned_stars >= program.total_stars
+            else "In progress"
+            if any(task.current_value > 0 for task in tasks)
+            else "Not started"
+        ),
+        "updated_at": program.updated_at.isoformat().replace("+00:00", "Z"),
+    }
+    if not include_categories:
+        return payload
+
+    payload["categories"] = []
+    for category in program.categories:
+        category_tasks = list(category.tasks)
+        category_completed = [
+            task
+            for task in category_tasks
+            if task.current_value >= task.target_value
+        ]
+        category_earned = sum(task.reward_stars for task in category_completed)
+        category_available = sum(task.reward_stars for task in category_tasks)
+        payload["categories"].append({
+            "id": category.id,
+            "name": category.name,
+            "description": category.description,
+            "task_count": len(category_tasks),
+            "completed_task_count": len(category_completed),
+            "earned_stars": category_earned,
+            "available_stars": category_available,
+            "progress_percent": round(
+                (len(category_completed) / len(category_tasks)) * 100,
+                1,
+            ) if category_tasks else 0,
+            "tasks": [serialize_task(task) for task in category_tasks],
+        })
+    return payload
 
 
 app = create_app()

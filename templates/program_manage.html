@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Manage MLB26 Programs · ShoTrax</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='theme.css') }}" rel="stylesheet">
+</head>
+<body class="shotrax-page">
+    <nav class="navbar navbar-expand-lg shotrax-navbar">
+        <div class="container">
+            <a class="shotrax-brand" href="/">
+                <img src="{{ url_for('static', filename='shotrax_logo.png') }}" alt="ShoTrax logo" class="shotrax-brand-mark">
+                <span class="shotrax-brand-text">ShoTrax</span>
+            </a>
+            <div class="navbar-nav shotrax-nav-links">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/babip">BABIP</a>
+                <a class="nav-link" href="/reports">Reports</a>
+                <a class="nav-link active" href="/programs">Programs</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container py-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-4">
+            <div>
+                <span class="section-eyebrow">Program workshop</span>
+                <h1 class="display-6 fw-bold mb-1">Build your MLB26 roadmap</h1>
+                <p class="text-muted mb-0">Start manually, import the MLB website HTML, or tune a program already in progress.</p>
+            </div>
+            <a class="btn btn-outline-secondary" href="/programs">← Back to program status</a>
+        </div>
+
+        <div id="manage-alert" class="alert d-none" role="alert"></div>
+
+        <ul class="nav nav-pills program-mode-tabs mb-4" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="manual-tab" data-bs-toggle="pill" data-bs-target="#manual-pane" type="button" role="tab">Create manually</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="import-tab" data-bs-toggle="pill" data-bs-target="#import-pane" type="button" role="tab">Import MLB26 HTML</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="manage-tab" data-bs-toggle="pill" data-bs-target="#manage-pane" type="button" role="tab">Modify a program</button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <section class="tab-pane fade show active" id="manual-pane" role="tabpanel" aria-labelledby="manual-tab">
+                <form id="create-program-form" class="card shadow-sm">
+                    <div class="card-body p-lg-4">
+                        <div class="row g-4">
+                            <div class="col-lg-5">
+                                <span class="section-eyebrow">Program details</span>
+                                <h2 class="h4 card-title">Name the destination</h2>
+                                <div class="mb-3">
+                                    <label class="form-label" for="create-name">Program name</label>
+                                    <input class="form-control" id="create-name" name="name" required maxlength="160" placeholder="Hall of Fame Program">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="create-total-stars">Stars to complete</label>
+                                    <input class="form-control" id="create-total-stars" name="total_stars" type="number" min="1" required placeholder="100">
+                                </div>
+                                <div>
+                                    <label class="form-label" for="create-description">Description <span class="text-muted fw-normal">(optional)</span></label>
+                                    <textarea class="form-control" id="create-description" name="description" rows="4" placeholder="What this program unlocks or when it expires."></textarea>
+                                </div>
+                            </div>
+                            <div class="col-lg-7">
+                                <div class="initial-task-panel">
+                                    <span class="section-eyebrow">First task</span>
+                                    <h2 class="h4 card-title">Add a starting objective</h2>
+                                    <p class="text-muted small">You can add as many categories and tasks as you need after creating the program.</p>
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label" for="create-category">Category</label>
+                                            <input class="form-control" id="create-category" name="category" required list="category-presets" placeholder="Moments">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label" for="create-task-title">Task name</label>
+                                            <input class="form-control" id="create-task-title" name="task_title" required placeholder="Complete the opening moment">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label" for="create-task-description">Task description</label>
+                                            <textarea class="form-control" id="create-task-description" name="task_description" rows="3" placeholder="Hit one home run with any player."></textarea>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label class="form-label" for="create-task-value">Task value</label>
+                                            <input class="form-control" id="create-task-value" name="target_value" type="number" min="1" value="1" required>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label class="form-label" for="create-task-reward">Reward stars</label>
+                                            <input class="form-control" id="create-task-reward" name="reward_stars" type="number" min="0" value="3" required>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer program-form-footer">
+                        <button class="btn btn-primary" type="submit">Create program</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="tab-pane fade" id="import-pane" role="tabpanel" aria-labelledby="import-tab">
+                <form id="import-program-form" class="card shadow-sm">
+                    <div class="card-body p-lg-4">
+                        <div class="row g-4">
+                            <div class="col-lg-5">
+                                <span class="section-eyebrow">HTML parser</span>
+                                <h2 class="h4 card-title">Import from MLB26</h2>
+                                <p class="text-muted small">Paste the program task-section HTML. ShoTrax reads accordion labels, task descriptions, meter values, and star rewards.</p>
+                                <div class="mb-3">
+                                    <label class="form-label" for="import-name">Program name</label>
+                                    <input class="form-control" id="import-name" name="name" required maxlength="160" placeholder="2026 Hall of Fame">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="import-total-stars">Stars to complete</label>
+                                    <input class="form-control" id="import-total-stars" name="total_stars" type="number" min="1" required placeholder="100">
+                                </div>
+                                <div>
+                                    <label class="form-label" for="import-description">Description <span class="text-muted fw-normal">(optional)</span></label>
+                                    <textarea class="form-control" id="import-description" name="description" rows="3"></textarea>
+                                </div>
+                            </div>
+                            <div class="col-lg-7">
+                                <label class="form-label" for="import-html">MLB26 program HTML</label>
+                                <textarea class="form-control font-monospace import-html-field" id="import-html" name="html" required rows="15" placeholder='<div class="mlb26-program-accordion">…'></textarea>
+                                <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                                    <button class="btn btn-outline-secondary" type="button" id="preview-import">Preview import</button>
+                                    <button class="btn btn-primary" type="submit">Import program</button>
+                                </div>
+                                <div id="import-preview" class="import-preview mt-3 d-none" aria-live="polite"></div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </section>
+
+            <section class="tab-pane fade" id="manage-pane" role="tabpanel" aria-labelledby="manage-tab">
+                <div id="manage-empty" class="card shadow-sm d-none">
+                    <div class="card-body text-center py-5">
+                        <h2 class="h4">No programs to modify yet</h2>
+                        <p class="text-muted">Create or import a program first.</p>
+                    </div>
+                </div>
+
+                <div id="manage-workspace" class="d-none">
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-body p-lg-4">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-lg-4">
+                                    <label class="form-label" for="manage-program-select">Program</label>
+                                    <select class="form-select" id="manage-program-select"></select>
+                                </div>
+                                <div class="col-lg-8 text-lg-end">
+                                    <span id="manage-program-stats" class="small text-muted"></span>
+                                </div>
+                            </div>
+                            <hr>
+                            <form id="edit-program-form" class="row g-3">
+                                <div class="col-md-5">
+                                    <label class="form-label" for="edit-name">Program name</label>
+                                    <input class="form-control" id="edit-name" required maxlength="160">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label" for="edit-total-stars">Stars to complete</label>
+                                    <input class="form-control" id="edit-total-stars" type="number" min="1" required>
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button class="btn btn-primary w-100" type="submit">Save program details</button>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="edit-description">Description</label>
+                                    <textarea class="form-control" id="edit-description" rows="2"></textarea>
+                                </div>
+                                <div class="col-12 text-end">
+                                    <button class="btn btn-sm btn-outline-danger" type="button" id="delete-program">Delete this program</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-xl-5">
+                            <form id="add-task-form" class="card shadow-sm h-100">
+                                <div class="card-body p-lg-4">
+                                    <span class="section-eyebrow">Grow the program</span>
+                                    <h2 class="h4 card-title">Add a category or task</h2>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="task-category">Category</label>
+                                        <input class="form-control" id="task-category" list="program-category-options" required placeholder="Missions">
+                                        <datalist id="program-category-options"></datalist>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="task-title">Task name</label>
+                                        <input class="form-control" id="task-title" required maxlength="200">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="task-description">Task description</label>
+                                        <textarea class="form-control" id="task-description" rows="3"></textarea>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-6">
+                                            <label class="form-label" for="task-value">Task value</label>
+                                            <input class="form-control" id="task-value" type="number" min="1" value="1" required>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label" for="task-reward">Reward stars</label>
+                                            <input class="form-control" id="task-reward" type="number" min="0" value="3" required>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-footer program-form-footer">
+                                    <button class="btn btn-primary" type="submit">Add task</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="col-xl-7">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body p-lg-4">
+                                    <div class="d-flex align-items-center justify-content-between mb-3">
+                                        <div>
+                                            <span class="section-eyebrow">Task inventory</span>
+                                            <h2 class="h4 card-title mb-0">Edit existing objectives</h2>
+                                        </div>
+                                    </div>
+                                    <div id="manage-task-list" class="manage-task-list"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <datalist id="category-presets">
+            <option value="Moments">
+            <option value="Missions">
+            <option value="Collection">
+            <option value="Conquest">
+            <option value="Showdown">
+        </datalist>
+    </main>
+
+    <div class="modal fade" id="edit-task-modal" tabindex="-1" aria-labelledby="edit-task-modal-title" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <form id="edit-task-form" class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="edit-task-modal-title">Edit task</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="modal-task-id">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="modal-task-category">Category</label>
+                            <input class="form-control" id="modal-task-category" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="modal-task-title">Task name</label>
+                            <input class="form-control" id="modal-task-title" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="modal-task-description">Description</label>
+                            <textarea class="form-control" id="modal-task-description" rows="4"></textarea>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label" for="modal-task-current">Current value</label>
+                            <input class="form-control" id="modal-task-current" type="number" min="0" required>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label" for="modal-task-target">Task value</label>
+                            <input class="form-control" id="modal-task-target" type="number" min="1" required>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label" for="modal-task-reward">Reward stars</label>
+                            <input class="form-control" id="modal-task-reward" type="number" min="0" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button class="btn btn-outline-danger" type="button" id="delete-task">Remove task</button>
+                    <div>
+                        <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-primary" type="submit">Save task</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='program_manage.js') }}"></script>
+</body>
+</html>
