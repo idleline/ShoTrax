@@ -57,7 +57,8 @@ document.querySelector("#create-program-form").addEventListener("submit", async 
                     title: formValue(form, "task_title"),
                     description: formValue(form, "task_description"),
                     target_value: formValue(form, "target_value"),
-                    reward_stars: formValue(form, "reward_stars")
+                    reward_stars: formValue(form, "reward_stars"),
+                    repeatable: formValue(form, "repeatable") === "on"
                 }
             })
         });
@@ -135,13 +136,28 @@ function renderTaskList() {
         <div class="manage-category-group">
             <div class="manage-category-heading">
                 <strong>${escapeHtml(category.name)}</strong>
-                <span>${category.tasks.length} task${category.tasks.length === 1 ? "" : "s"}</span>
+                <div class="manage-category-settings">
+                    <span>${category.tasks.length} task${category.tasks.length === 1 ? "" : "s"}</span>
+                    <label class="form-check form-switch mb-0" title="${category.has_repeatable_tasks ? "Shared progress is unavailable for categories with repeatable tasks." : "Use one counter for all task thresholds."}">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            data-shared-category-toggle="${category.id}"
+                            ${category.shared_progress_enabled ? "checked" : ""}
+                            ${category.has_repeatable_tasks ? "disabled" : ""}
+                        >
+                        <span class="form-check-label">Shared counter</span>
+                    </label>
+                </div>
             </div>
             ${category.tasks.map(task => `
                 <button class="manage-task-row" type="button" data-edit-task="${task.id}">
                     <span>
                         <strong>${escapeHtml(task.title)}</strong>
-                        <small>${task.current_value}/${task.target_value} · ${task.reward_stars} stars</small>
+                        <small>
+                            ${task.current_value}/${task.target_value} · ${task.reward_stars} stars
+                            ${task.repeatable ? ` · Repeatable (${task.repeat_completions} earned)` : ""}
+                        </small>
                     </span>
                     <span class="manage-edit-label">Edit</span>
                 </button>
@@ -249,7 +265,8 @@ document.querySelector("#add-task-form").addEventListener("submit", async event 
                 title: document.querySelector("#task-title").value,
                 description: document.querySelector("#task-description").value,
                 target_value: document.querySelector("#task-value").value,
-                reward_stars: document.querySelector("#task-reward").value
+                reward_stars: document.querySelector("#task-reward").value,
+                repeatable: document.querySelector("#task-repeatable").checked
             })
         });
         manageState.activeProgram = payload.program;
@@ -259,6 +276,25 @@ document.querySelector("#add-task-form").addEventListener("submit", async event 
         renderActiveProgram();
         showManageAlert(payload.message);
     } catch (error) {
+        showManageAlert(error.message, true);
+    }
+});
+
+document.querySelector("#manage-task-list").addEventListener("change", async event => {
+    const toggle = event.target.closest("[data-shared-category-toggle]");
+    if (!toggle) {
+        return;
+    }
+    try {
+        const payload = await apiRequest(`/api/program-categories/${toggle.dataset.sharedCategoryToggle}`, {
+            method: "PATCH",
+            body: JSON.stringify({shared_progress_enabled: toggle.checked})
+        });
+        manageState.activeProgram = payload.program;
+        renderActiveProgram();
+        showManageAlert(payload.message);
+    } catch (error) {
+        toggle.checked = !toggle.checked;
         showManageAlert(error.message, true);
     }
 });
@@ -276,6 +312,10 @@ document.querySelector("#manage-task-list").addEventListener("click", event => {
     document.querySelector("#modal-task-current").value = task.current_value;
     document.querySelector("#modal-task-target").value = task.target_value;
     document.querySelector("#modal-task-reward").value = task.reward_stars;
+    document.querySelector("#modal-task-repeatable").checked = task.repeatable;
+    document.querySelector("#modal-repeatable-status").textContent = task.repeatable
+        ? `${task.repeat_completions} reward cycle${task.repeat_completions === 1 ? "" : "s"} earned (${task.earned_stars} stars retained).`
+        : "Each completed cycle awards the configured stars.";
     manageState.taskModal.show();
 });
 
@@ -291,7 +331,8 @@ document.querySelector("#edit-task-form").addEventListener("submit", async event
                 description: document.querySelector("#modal-task-description").value,
                 current_value: document.querySelector("#modal-task-current").value,
                 target_value: document.querySelector("#modal-task-target").value,
-                reward_stars: document.querySelector("#modal-task-reward").value
+                reward_stars: document.querySelector("#modal-task-reward").value,
+                repeatable: document.querySelector("#modal-task-repeatable").checked
             })
         });
         manageState.activeProgram = payload.program;

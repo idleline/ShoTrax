@@ -315,6 +315,22 @@ body.shotrax-page {
     background: linear-gradient(135deg, rgba(241, 90, 41, 0.07), rgba(0, 45, 114, 0.04));
 }
 
+.program-list-item.complete,
+.program-list-item.complete:hover,
+.program-list-item.complete.active {
+    border-color: rgba(25, 135, 84, 0.38);
+    background: linear-gradient(135deg, rgba(209, 245, 224, 0.92), rgba(239, 251, 244, 0.98));
+    box-shadow: 0 10px 24px rgba(25, 135, 84, 0.1);
+}
+
+.program-list-item.complete .program-list-topline span {
+    color: #198754;
+}
+
+.program-list-item.complete .program-list-progress span {
+    background: #198754;
+}
+
 .program-list-topline,
 .program-list-meta {
     display: flex;
@@ -530,7 +546,7 @@ body.shotrax-page {
 .program-category summary {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 160px 24px;
+    grid-template-columns: minmax(0, 1fr) minmax(160px, max-content) 24px;
     align-items: center;
     gap: 1.25rem;
     padding: 1.15rem 1.35rem;
@@ -590,6 +606,36 @@ body.shotrax-page {
     font-size: 0.86rem;
 }
 
+.shared-category-header-control {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.7rem;
+    min-width: 0;
+}
+
+.shared-category-header-label {
+    min-width: 0;
+    text-align: right;
+}
+
+.shared-category-header-label .section-eyebrow,
+.shared-category-header-label small {
+    display: block;
+}
+
+.shared-category-header-label .section-eyebrow {
+    margin-bottom: 0.1rem;
+    color: var(--shotrax-orange) !important;
+    font-size: 0.6rem !important;
+    letter-spacing: 0.06em;
+}
+
+.shared-category-header-label small {
+    color: var(--shotrax-muted);
+    font-size: 0.7rem !important;
+}
+
 .program-task {
     display: grid;
     grid-template-columns: 32px minmax(0, 1fr);
@@ -629,6 +675,27 @@ body.shotrax-page {
     color: var(--shotrax-navy);
     font-size: 0.95rem;
     font-weight: 800;
+}
+
+.repeatable-badge {
+    display: inline-flex;
+    margin-left: 0.35rem;
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    color: #6b4f00;
+    background: #fff3cd;
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    text-transform: uppercase;
+    vertical-align: 0.08rem;
+}
+
+.repeatable-awards {
+    margin-top: 0.4rem;
+    color: #13653b;
+    font-size: 0.74rem;
+    font-weight: 700;
 }
 
 .program-task-description {
@@ -711,6 +778,32 @@ body.shotrax-page {
     padding: 0 0.4rem;
     color: var(--shotrax-muted);
     font-size: 0.78rem;
+}
+
+.shared-task-value {
+    min-width: 90px;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid rgba(0, 45, 114, 0.12);
+    border-radius: 12px;
+    color: var(--shotrax-navy);
+    background: var(--shotrax-soft);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-align: center;
+}
+
+.shared-task-value span {
+    color: var(--shotrax-muted);
+    font-weight: 600;
+}
+
+.repeatable-complete-control {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--shotrax-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
 }
 
 .program-mode-tabs {
@@ -807,6 +900,29 @@ body.shotrax-page {
 
 .manage-category-heading span {
     color: var(--shotrax-muted);
+}
+
+.manage-category-settings {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+}
+
+.manage-category-settings .form-check {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 0;
+}
+
+.manage-category-settings .form-check-input {
+    margin: 0;
+}
+
+.manage-category-settings .form-check-label {
+    color: var(--shotrax-navy);
+    font-size: 0.72rem;
+    font-weight: 700;
 }
 
 .manage-task-row {
@@ -914,10 +1030,22 @@ body.shotrax-page {
 
     .program-category summary {
         grid-template-columns: minmax(0, 1fr) 24px;
+        grid-template-rows: auto auto;
     }
 
     .category-summary-progress {
         display: none;
+    }
+
+    .program-category summary > .category-chevron {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .shared-category-header-control {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        justify-content: space-between;
     }
 
     .program-task-progress-row {
@@ -926,5 +1054,20 @@ body.shotrax-page {
 
     .task-stepper {
         justify-self: start;
+    }
+
+    .repeatable-complete-control {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .manage-category-heading,
+    .manage-category-settings {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .manage-category-settings {
+        gap: 0.45rem;
     }
 }

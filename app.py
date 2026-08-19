@@ -99,6 +99,8 @@ class ProgramCategory(db.Model):
     name = db.Column(db.String(160), nullable=False)
     description = db.Column(db.Text, nullable=False, default="")
     sort_order = db.Column(db.Integer, nullable=False, default=0)
+    shared_progress_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    shared_progress_value = db.Column(db.Integer, nullable=False, default=0)
     program = db.relationship("Program", back_populates="categories")
     tasks = db.relationship(
         "ProgramTask",
@@ -123,6 +125,8 @@ class ProgramTask(db.Model):
     target_value = db.Column(db.Integer, nullable=False)
     current_value = db.Column(db.Integer, nullable=False, default=0)
     reward_stars = db.Column(db.Integer, nullable=False)
+    repeatable = db.Column(db.Boolean, nullable=False, default=False)
+    repeat_completions = db.Column(db.Integer, nullable=False, default=0)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     category = db.relationship("ProgramCategory", back_populates="tasks")
 
@@ -203,6 +207,52 @@ def ensure_event_columns() -> None:
                 connection.execute(text(f"ALTER TABLE {model.__tablename__} ADD COLUMN game_mode VARCHAR(20)"))
 
 
+def ensure_program_columns() -> None:
+    category_columns = {
+        column["name"]
+        for column in inspect(db.engine).get_columns(ProgramCategory.__tablename__)
+    }
+    task_columns = {
+        column["name"]
+        for column in inspect(db.engine).get_columns(ProgramTask.__tablename__)
+    }
+
+    with db.engine.begin() as connection:
+        if "shared_progress_enabled" not in category_columns:
+            connection.execute(text(
+                "ALTER TABLE program_categories "
+                "ADD COLUMN shared_progress_enabled BOOLEAN NOT NULL DEFAULT 0"
+            ))
+        if "shared_progress_value" not in category_columns:
+            connection.execute(text(
+                "ALTER TABLE program_categories "
+                "ADD COLUMN shared_progress_value INTEGER NOT NULL DEFAULT 0"
+            ))
+        if "repeatable" not in task_columns:
+            connection.execute(text(
+                "ALTER TABLE program_tasks "
+                "ADD COLUMN repeatable BOOLEAN NOT NULL DEFAULT 0"
+            ))
+        if "repeat_completions" not in task_columns:
+            connection.execute(text(
+                "ALTER TABLE program_tasks "
+                "ADD COLUMN repeat_completions INTEGER NOT NULL DEFAULT 0"
+            ))
+        connection.execute(text(
+            "UPDATE program_tasks "
+            "SET repeatable = 1 "
+            "WHERE LOWER(title) LIKE '%repeatable%' "
+            "OR LOWER(description) LIKE '%repeatable%'"
+        ))
+        connection.execute(text(
+            "UPDATE program_tasks "
+            "SET repeat_completions = 1 "
+            "WHERE repeatable = 1 "
+            "AND current_value >= target_value "
+            "AND repeat_completions = 0"
+        ))
+
+
 def create_app(config: Optional[dict] = None) -> Flask:
     app = Flask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///baseball_hits.db"
@@ -216,6 +266,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     with app.app_context():
         db.create_all()
         ensure_event_columns()
+        ensure_program_columns()
 
     @app.route("/")
     def index():
@@ -288,6 +339,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
             target_value=int(initial_task["target_value"]),
             reward_stars=int(initial_task["reward_stars"]),
             current_value=0,
+            repeatable=parse_bool(initial_task.get("repeatable")),
             sort_order=0,
         ))
         db.session.commit()
@@ -351,13 +403,23 @@ def create_app(config: Optional[dict] = None) -> Flask:
             )
             db.session.add(category)
 
+        repeatable = parse_bool(payload.get("repeatable"))
+        if category.shared_progress_enabled and repeatable:
+            return jsonify({
+                "error": "Repeatable tasks cannot use a shared category counter."
+            }), 400
+
         task = ProgramTask(
             category=category,
             title=clean_text(payload.get("title")),
             description=clean_text(payload.get("description")),
             target_value=int(payload["target_value"]),
             reward_stars=int(payload["reward_stars"]),
-            current_value=0,
+            current_value=min(
+                category.shared_progress_value,
+                int(payload["target_value"]),
+            ) if category.shared_progress_enabled else 0,
+            repeatable=repeatable,
             sort_order=len(category.tasks),
         )
         db.session.add(task)
@@ -367,6 +429,70 @@ def create_app(config: Optional[dict] = None) -> Flask:
             "message": "Task added.",
             "program": serialize_program(program),
         }), 201
+
+    @app.patch("/api/program-categories/<int:category_id>")
+    def update_program_category(category_id: int):
+        category = db.get_or_404(ProgramCategory, category_id)
+        payload = request.get_json(silent=True) or {}
+        shared_progress_enabled = parse_bool(
+            payload.get("shared_progress_enabled", category.shared_progress_enabled)
+        )
+
+        if shared_progress_enabled and any(task.repeatable for task in category.tasks):
+            return jsonify({
+                "error": "A category with repeatable tasks cannot use shared progress."
+            }), 400
+
+        category.shared_progress_enabled = shared_progress_enabled
+        if shared_progress_enabled:
+            category.shared_progress_value = max(
+                (task.current_value for task in category.tasks),
+                default=0,
+            )
+            for task in category.tasks:
+                task.current_value = min(
+                    category.shared_progress_value,
+                    task.target_value,
+                )
+
+        category.program.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return jsonify({
+            "message": (
+                "Shared category progress enabled."
+                if shared_progress_enabled
+                else "Shared category progress disabled."
+            ),
+            "program": serialize_program(category.program),
+        }), 200
+
+    @app.post("/api/program-categories/<int:category_id>/progress")
+    def update_category_progress(category_id: int):
+        category = db.get_or_404(ProgramCategory, category_id)
+        if not category.shared_progress_enabled:
+            return jsonify({
+                "error": "Enable shared progress for this category first."
+            }), 400
+
+        payload = request.get_json(silent=True) or {}
+        current_value = parse_nonnegative_int(payload.get("current_value"))
+        if current_value is None:
+            return jsonify({"error": "Progress must be a non-negative whole number."}), 400
+
+        max_target = max((task.target_value for task in category.tasks), default=0)
+        category.shared_progress_value = min(current_value, max_target)
+        for task in category.tasks:
+            task.current_value = min(
+                category.shared_progress_value,
+                task.target_value,
+            )
+
+        category.program.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return jsonify({
+            "message": "Category progress updated.",
+            "program": serialize_program(category.program),
+        }), 200
 
     @app.patch("/api/program-tasks/<int:task_id>")
     def update_program_task(task_id: int):
@@ -378,6 +504,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
         target_value = parse_positive_int(payload.get("target_value", task.target_value))
         reward_stars = parse_nonnegative_int(payload.get("reward_stars", task.reward_stars))
         current_value = parse_nonnegative_int(payload.get("current_value", task.current_value))
+        repeatable = parse_bool(payload.get("repeatable", task.repeatable))
         category_name = clean_text(payload.get("category", task.category.name))
         if not title or not category_name:
             return jsonify({"error": "Category and task name are required."}), 400
@@ -404,11 +531,26 @@ def create_app(config: Optional[dict] = None) -> Flask:
             task.category = category
             task.sort_order = len(category.tasks)
 
+        if task.category.shared_progress_enabled and repeatable:
+            return jsonify({
+                "error": "Repeatable tasks cannot use a shared category counter."
+            }), 400
+
+        was_completed = task.current_value >= task.target_value
         task.title = title
         task.description = description
         task.target_value = target_value
         task.reward_stars = reward_stars
-        task.current_value = min(current_value, target_value)
+        task.repeatable = repeatable
+        task.current_value = (
+            min(task.category.shared_progress_value, target_value)
+            if task.category.shared_progress_enabled
+            else min(current_value, target_value)
+        )
+        if task.repeatable and not was_completed and task.current_value >= task.target_value:
+            task.repeat_completions += 1
+        elif task.repeatable and task.current_value >= task.target_value:
+            task.repeat_completions = max(1, task.repeat_completions)
         program.updated_at = datetime.now(timezone.utc)
         db.session.commit()
         return jsonify({
@@ -424,11 +566,37 @@ def create_app(config: Optional[dict] = None) -> Flask:
         if current_value is None:
             return jsonify({"error": "Progress must be a non-negative whole number."}), 400
 
-        task.current_value = min(current_value, task.target_value)
+        if task.category.shared_progress_enabled:
+            return jsonify({
+                "error": "Use the shared category counter to update this task."
+            }), 400
+
+        next_value = min(current_value, task.target_value)
+        if task.repeatable and task.current_value >= task.target_value and next_value < task.target_value:
+            return jsonify({
+                "error": "Reset this repeatable task before starting another cycle."
+            }), 409
+        if task.repeatable and task.current_value < task.target_value and next_value >= task.target_value:
+            task.repeat_completions += 1
+        task.current_value = next_value
         task.category.program.updated_at = datetime.now(timezone.utc)
         db.session.commit()
         return jsonify({
             "message": "Progress updated.",
+            "program": serialize_program(task.category.program),
+        }), 200
+
+    @app.post("/api/program-tasks/<int:task_id>/reset")
+    def reset_repeatable_task(task_id: int):
+        task = db.get_or_404(ProgramTask, task_id)
+        if not task.repeatable:
+            return jsonify({"error": "Only repeatable tasks can be reset."}), 400
+
+        task.current_value = 0
+        task.category.program.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return jsonify({
+            "message": "Task reset. Earned rewards were preserved.",
             "program": serialize_program(task.category.program),
         }), 200
 
@@ -497,10 +665,22 @@ def create_app(config: Optional[dict] = None) -> Flask:
             )
             db.session.add(category)
             for task_index, task_data in enumerate(category_data["tasks"]):
+                repeatable = bool(task_data.get("repeatable", False))
                 db.session.add(ProgramTask(
                     category=category,
                     sort_order=task_index,
-                    **task_data,
+                    title=task_data["title"],
+                    description=task_data["description"],
+                    target_value=task_data["target_value"],
+                    current_value=task_data["current_value"],
+                    reward_stars=task_data["reward_stars"],
+                    repeatable=repeatable,
+                    repeat_completions=(
+                        1
+                        if repeatable
+                        and task_data["current_value"] >= task_data["target_value"]
+                        else 0
+                    ),
                 ))
 
         db.session.commit()
@@ -891,6 +1071,12 @@ def clean_text(value) -> str:
     return str(value or "").strip()
 
 
+def parse_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def parse_positive_int(value) -> int | None:
     try:
         parsed = int(value)
@@ -933,6 +1119,13 @@ def validate_program_payload(payload: dict, require_task: bool = False) -> list[
 
 def serialize_task(task: ProgramTask) -> dict:
     completed = task.current_value >= task.target_value
+    earned_stars = (
+        task.reward_stars * task.repeat_completions
+        if task.repeatable
+        else task.reward_stars
+        if completed
+        else 0
+    )
     return {
         "id": task.id,
         "category_id": task.category_id,
@@ -942,6 +1135,9 @@ def serialize_task(task: ProgramTask) -> dict:
         "target_value": task.target_value,
         "current_value": task.current_value,
         "reward_stars": task.reward_stars,
+        "repeatable": task.repeatable,
+        "repeat_completions": task.repeat_completions,
+        "earned_stars": earned_stars,
         "completed": completed,
         "progress_percent": round(min(100, (task.current_value / task.target_value) * 100), 1),
     }
@@ -950,8 +1146,20 @@ def serialize_task(task: ProgramTask) -> dict:
 def serialize_program(program: Program, include_categories: bool = True) -> dict:
     tasks = [task for category in program.categories for task in category.tasks]
     completed_tasks = [task for task in tasks if task.current_value >= task.target_value]
-    earned_stars = sum(task.reward_stars for task in completed_tasks)
-    available_stars = sum(task.reward_stars for task in tasks)
+    earned_stars = sum(
+        task.reward_stars * task.repeat_completions
+        if task.repeatable
+        else task.reward_stars
+        if task.current_value >= task.target_value
+        else 0
+        for task in tasks
+    )
+    available_stars = sum(
+        task.reward_stars * max(1, task.repeat_completions)
+        if task.repeatable
+        else task.reward_stars
+        for task in tasks
+    )
     remaining_stars = max(0, program.total_stars - earned_stars)
     progress_percent = round(
         min(100, (earned_stars / program.total_stars) * 100),
@@ -974,7 +1182,7 @@ def serialize_program(program: Program, include_categories: bool = True) -> dict
             "Complete"
             if earned_stars >= program.total_stars
             else "In progress"
-            if any(task.current_value > 0 for task in tasks)
+            if any(task.current_value > 0 or task.repeat_completions > 0 for task in tasks)
             else "Not started"
         ),
         "updated_at": program.updated_at.isoformat().replace("+00:00", "Z"),
@@ -990,8 +1198,20 @@ def serialize_program(program: Program, include_categories: bool = True) -> dict
             for task in category_tasks
             if task.current_value >= task.target_value
         ]
-        category_earned = sum(task.reward_stars for task in category_completed)
-        category_available = sum(task.reward_stars for task in category_tasks)
+        category_earned = sum(
+            task.reward_stars * task.repeat_completions
+            if task.repeatable
+            else task.reward_stars
+            if task.current_value >= task.target_value
+            else 0
+            for task in category_tasks
+        )
+        category_available = sum(
+            task.reward_stars * max(1, task.repeat_completions)
+            if task.repeatable
+            else task.reward_stars
+            for task in category_tasks
+        )
         payload["categories"].append({
             "id": category.id,
             "name": category.name,
@@ -1004,6 +1224,13 @@ def serialize_program(program: Program, include_categories: bool = True) -> dict
                 (len(category_completed) / len(category_tasks)) * 100,
                 1,
             ) if category_tasks else 0,
+            "shared_progress_enabled": category.shared_progress_enabled,
+            "shared_progress_value": category.shared_progress_value,
+            "shared_progress_max": max(
+                (task.target_value for task in category_tasks),
+                default=0,
+            ),
+            "has_repeatable_tasks": any(task.repeatable for task in category_tasks),
             "tasks": [serialize_task(task) for task in category_tasks],
         })
     return payload

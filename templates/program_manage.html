@@ -95,6 +95,13 @@
                                             <label class="form-label" for="create-task-reward">Reward stars</label>
                                             <input class="form-control" id="create-task-reward" name="reward_stars" type="number" min="0" value="3" required>
                                         </div>
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" id="create-task-repeatable" name="repeatable" type="checkbox">
+                                                <label class="form-check-label fw-semibold" for="create-task-repeatable">Repeatable task</label>
+                                            </div>
+                                            <div class="form-text">Each completed cycle awards stars; reset starts the next cycle without removing earned rewards.</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -213,6 +220,13 @@
                                             <label class="form-label" for="task-reward">Reward stars</label>
                                             <input class="form-control" id="task-reward" type="number" min="0" value="3" required>
                                         </div>
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" id="task-repeatable" type="checkbox">
+                                                <label class="form-check-label fw-semibold" for="task-repeatable">Repeatable task</label>
+                                            </div>
+                                            <div class="form-text">A repeatable task can be reset after each completed reward cycle.</div>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="card-footer program-form-footer">
@@ -280,6 +294,13 @@
                         <div class="col-sm-4">
                             <label class="form-label" for="modal-task-reward">Reward stars</label>
                             <input class="form-control" id="modal-task-reward" type="number" min="0" required>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" id="modal-task-repeatable" type="checkbox">
+                                <label class="form-check-label fw-semibold" for="modal-task-repeatable">Repeatable task</label>
+                            </div>
+                            <div id="modal-repeatable-status" class="form-text"></div>
                         </div>
                     </div>
                 </div>

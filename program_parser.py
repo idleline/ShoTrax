@@ -168,6 +168,10 @@ def parse_mlb26_program_html(html: str) -> list[dict]:
             target_value = _integer(None if meter is None else meter.attrs.get("max"), 1)
             current_value = _integer(None if meter is None else meter.attrs.get("value"), 0)
             reward_stars = _integer(None if reward_node is None else reward_node.text(), 0)
+            repeatable = "repeatable" in " ".join([
+                task_label.text(),
+                "" if content is None else content.text(),
+            ]).casefold()
 
             category["tasks"].append({
                 "title": task_label.text(),
@@ -175,6 +179,7 @@ def parse_mlb26_program_html(html: str) -> list[dict]:
                 "target_value": max(1, target_value),
                 "current_value": max(0, min(current_value, max(1, target_value))),
                 "reward_stars": max(0, reward_stars),
+                "repeatable": repeatable,
             })
 
         categories.append(category)
