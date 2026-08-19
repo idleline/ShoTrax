@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ShoTrax MLB26 Programs</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='theme.css') }}" rel="stylesheet">
+</head>
+<body class="shotrax-page">
+    <nav class="navbar navbar-expand-lg shotrax-navbar">
+        <div class="container">
+            <a class="shotrax-brand" href="/">
+                <img src="{{ url_for('static', filename='shotrax_logo.png') }}" alt="ShoTrax logo" class="shotrax-brand-mark">
+                <span class="shotrax-brand-text">ShoTrax</span>
+            </a>
+            <div class="navbar-nav shotrax-nav-links">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link" href="/babip">BABIP</a>
+                <a class="nav-link" href="/reports">Reports</a>
+                <a class="nav-link active" href="/programs">Programs</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container py-4">
+        <section class="shotrax-hero program-hero">
+            <div class="row align-items-center g-4">
+                <div class="col-lg-8">
+                    <span class="shotrax-kicker">MLB The Show 26</span>
+                    <h1 class="mb-2">Program Command Center</h1>
+                    <p class="mb-0">See the exact path to your next reward, update task counts as you play, and keep every program organized in one place.</p>
+                </div>
+                <div class="col-lg-4 text-lg-end">
+                    <a class="btn btn-accent btn-lg" href="/programs/manage">Add or manage programs</a>
+                </div>
+            </div>
+        </section>
+
+        <div id="programs-alert" class="alert d-none" role="alert"></div>
+
+        <section id="program-empty" class="card shadow-sm d-none">
+            <div class="card-body text-center py-5">
+                <div class="program-empty-icon mb-3">★</div>
+                <h2 class="h4">Your program board is ready</h2>
+                <p class="text-muted mb-4">Create a program manually or import tasks from MLB26 HTML.</p>
+                <a class="btn btn-primary" href="/programs/manage">Create your first program</a>
+            </div>
+        </section>
+
+        <div id="program-dashboard" class="row g-4 d-none">
+            <aside class="col-lg-4 col-xl-3">
+                <div class="card shadow-sm program-picker-card">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+                            <div>
+                                <span class="section-eyebrow">Programs</span>
+                                <h2 class="h5 card-title mb-0">Your clubhouse</h2>
+                            </div>
+                            <a class="btn btn-sm btn-outline-secondary" href="/programs/manage">Manage</a>
+                        </div>
+                        <div id="program-list" class="program-list" role="list"></div>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="col-lg-8 col-xl-9">
+                <section id="program-summary" aria-live="polite"></section>
+                <section id="program-categories" class="mt-4"></section>
+            </div>
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='programs.js') }}"></script>
+</body>
+</html>
