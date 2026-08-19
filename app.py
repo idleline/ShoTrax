@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 from io import StringIO
 from datetime import datetime, timezone
 from typing import Optional
@@ -255,7 +256,10 @@ def ensure_program_columns() -> None:
 
 def create_app(config: Optional[dict] = None) -> Flask:
     app = Flask(__name__)
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///baseball_hits.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+        "DATABASE_URL",
+        "sqlite:///baseball_hits.db",
+    )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
     if config:
@@ -271,6 +275,10 @@ def create_app(config: Optional[dict] = None) -> Flask:
     @app.route("/")
     def index():
         return render_template("index.html", active_page="home")
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
 
     @app.route("/reports")
     def reports():
