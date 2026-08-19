@@ -1,0 +1,9 @@
+[Unit]
+Description=Renew ShoTrax TLS certificate
+Requires=docker.service shotrax.service
+After=docker.service shotrax.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/shotrax/current
+ExecStart=/opt/shotrax/current/scripts/renew-certificates.sh

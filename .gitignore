@@ -1,15 +1,6 @@
 *.db
 *.rtf
 .nova
-*.dockerignore
-*.env.example
-Dockerfile
-compose.yaml
-edge
-integration
-nginx
-scripts
-systemd
 exports/*
 tests
 .DS_Store

@@ -1,0 +1,16 @@
+.env
+.git
+.venv
+__pycache__
+*.py[cod]
+exports
+instance
+nginx
+edge
+integration
+scripts
+state
+systemd
+tests
+*.db
+*.rtf
